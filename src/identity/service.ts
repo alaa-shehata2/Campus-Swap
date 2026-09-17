@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fail, ok, type FieldError, type Result } from '../common/errors.js';
 import { IdentityStore, type StoredUser } from './store.js';
-import type { ProfilePatch, RegisterInput, Session, UserPublic } from './types.js';
+import type { ProfilePatch, RegisterInput, Restriction, Role, Session, UserPublic } from './types.js';
 
 export const DEFAULT_CAMPUS = 'KFS University';
 export const MAX_BIO_LENGTH = 500;
@@ -11,10 +11,11 @@ export const MAX_PASSWORD_LENGTH = 256;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function toPublic(user: StoredUser): UserPublic {
-  const { email: _email, passwordHash: _h, passwordSalt: _s, ...rest } = user;
+  const { email: _email, passwordHash: _h, passwordSalt: _s, deactivated: _d, ...rest } = user;
   void _email;
   void _h;
   void _s;
+  void _d;
   return rest;
 }
 
@@ -95,8 +96,20 @@ export function createIdentityService(store = new IdentityStore()) {
       return fail([{ code: 'invalid-credentials', message: 'Email or password is incorrect.' }]);
     }
     const user = store.findByEmail(email.trim());
-    if (!user || password.length > MAX_PASSWORD_LENGTH || !store.verifyPassword(user, password)) {
+    if (!user) {
       return fail([{ code: 'invalid-credentials', message: 'Email or password is incorrect.' }]);
+    }
+    if (user.deactivated) {
+      return fail([{ code: 'account-deactivated', message: 'This account has been deactivated.' }]);
+    }
+    if (password.length > MAX_PASSWORD_LENGTH || !store.verifyPassword(user, password)) {
+      return fail([{ code: 'invalid-credentials', message: 'Email or password is incorrect.' }]);
+    }
+    if (user.restriction === 'suspended') {
+      return fail([{ code: 'account-suspended', message: 'This account is suspended.' }]);
+    }
+    if (user.restriction === 'banned') {
+      return fail([{ code: 'account-banned', message: 'This account is banned.' }]);
     }
     const token = randomUUID();
     sessions.set(token, user.id);
@@ -105,7 +118,8 @@ export function createIdentityService(store = new IdentityStore()) {
 
   function getProfile(id: string): UserPublic | undefined {
     const user = store.findById(id);
-    return user ? toPublic(user) : undefined;
+    if (!user || user.deactivated) return undefined;
+    return toPublic(user);
   }
 
   function updateProfile(id: string, patch: ProfilePatch): Result<UserPublic> {
@@ -137,6 +151,52 @@ export function createIdentityService(store = new IdentityStore()) {
     return ok(toPublic(user));
   }
 
+  /** Moderation-only: set a restriction badge (FR-M-4). HTTP layer must gate to moderators. */
+  function restrict(userId: string, restriction: Restriction): void {
+    if (restriction !== 'none' && restriction !== 'suspended' && restriction !== 'banned') {
+      throw new Error(`Invalid restriction: ${restriction}.`);
+    }
+    const user = store.findById(userId);
+    if (!user) throw new Error('User not found.');
+    user.restriction = restriction;
+    store.save(user);
+    if (restriction !== 'none') revokeSessions(userId);
+  }
+
+  /** Deactivation hides the profile and blocks login immediately (P-3). */
+  function deactivate(userId: string): void {
+    const user = store.findById(userId);
+    if (!user) throw new Error('User not found.');
+    user.deactivated = true;
+    store.save(user);
+    revokeSessions(userId);
+  }
+
+  /**
+   * Role assignment. Bootstrap (caller 'bootstrap') works only while no
+   * moderator exists; afterwards the caller must be a moderator. The HTTP
+   * layer must additionally gate this to the platform owner in production.
+   */
+  function setRole(callerId: string, userId: string, role: Role): void {
+    if (role !== 'member' && role !== 'moderator') throw new Error(`Invalid role: ${role}.`);
+    if (store.hasModerator()) {
+      const caller = store.findById(callerId);
+      if (!caller || caller.role !== 'moderator') {
+        throw new Error('Only moderators can assign roles.');
+      }
+    }
+    const user = store.findById(userId);
+    if (!user) throw new Error('User not found.');
+    user.role = role;
+    store.save(user);
+  }
+
+  function revokeSessions(userId: string): void {
+    for (const [token, id] of sessions) {
+      if (id === userId) sessions.delete(token);
+    }
+  }
+
   /** Resolve a session token to its owner. HTTP layer must bind this to mutations (S-1/S-2). */
   function resolveSession(token: string): string | undefined {
     return sessions.get(token);
@@ -163,7 +223,9 @@ export function createIdentityService(store = new IdentityStore()) {
   function mute(userId: string, mutedId: string): void {
     if (userId === mutedId) throw new Error('You cannot mute yourself.');
     muted.add(pairKey(userId, mutedId));
-  }  function unmute(userId: string, mutedId: string): void {
+  }
+
+  function unmute(userId: string, mutedId: string): void {
     muted.delete(pairKey(userId, mutedId));
   }
 
@@ -190,6 +252,9 @@ export function createIdentityService(store = new IdentityStore()) {
     mute,
     unmute,
     isBlockedOrMuted,
+    restrict,
+    deactivate,
+    setRole,
   };
 }
 

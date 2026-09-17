@@ -1,5 +1,8 @@
 export type Role = 'member' | 'moderator';
 
+/** Moderation restriction badge (FR-ID-3). Set only via moderation sanctions. */
+export type Restriction = 'none' | 'suspended' | 'banned';
+
 export interface RegisterInput {
   email: string;
   password: string;
@@ -23,6 +26,7 @@ export interface UserPublic {
   skillTags?: string[];
   availabilityNotes?: string;
   role: Role;
+  restriction: Restriction;
 }
 
 export interface Session {

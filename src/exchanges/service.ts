@@ -1,5 +1,6 @@
 import { fail, ok, type Result } from '../common/errors.js';
 import { formatCairoTime } from '../common/cairoTime.js';
+import type { NotifyPort } from '../notifications/types.js';
 import { ExchangesStore } from './store.js';
 import type {
   CancelReason,
@@ -20,6 +21,8 @@ export const MAX_MESSAGE_LENGTH = 2000;
 export interface ExchangesDeps {
   listings: ListingsPort;
   identity: IdentityPort;
+  /** Optional notification sink (FR-N-1 event updates). */
+  notify?: NotifyPort;
 }
 
 export function createExchangesService(
@@ -123,17 +126,21 @@ export function createExchangesService(
       }
     }
 
-    return ok(
-      store.insertProposal({
-        proposerId,
-        counterpartyId,
-        sideAListingIds: sideA,
-        sideBListingIds: sideB,
-        terms: input.terms.trim(),
-        status: 'Proposed',
-        createdAtMs: now(),
-      }),
-    );
+    const proposal = store.insertProposal({
+      proposerId,
+      counterpartyId,
+      sideAListingIds: sideA,
+      sideBListingIds: sideB,
+      terms: input.terms.trim(),
+      status: 'Proposed',
+      createdAtMs: now(),
+    });
+    deps.notify?.emit(counterpartyId, 'proposal-received', proposal.id);
+    return ok(proposal);
+  }
+
+  function otherOf(e: Exchange, userId: string): string {
+    return userId === e.participantA ? e.participantB : e.participantA;
   }
 
   /** Participant-gated proposal read: negotiation terms stay between the two sides. */
@@ -165,6 +172,7 @@ export function createExchangesService(
       p.status = 'Declined';
       p.decidedAtMs = now();
       store.saveProposal(p);
+      deps.notify?.emit(p.proposerId, 'proposal-declined', p.id);
       return ok(p);
     }
     return accept(p);
@@ -213,6 +221,7 @@ export function createExchangesService(
     p.decidedAtMs = now();
     p.exchangeId = exchange.id;
     store.saveProposal(p);
+    deps.notify?.emit(p.proposerId, 'proposal-accepted', p.id);
     return ok({ proposal: p, exchange });
   }
 
@@ -259,6 +268,7 @@ export function createExchangesService(
       p.status = 'Expired';
       p.decidedAtMs = nowMs;
       store.saveProposal(p);
+      deps.notify?.emit(p.proposerId, 'proposal-expired', p.id);
     }
     return expired;
   }
@@ -315,9 +325,11 @@ export function createExchangesService(
         },
       ]);
     }
+    const rescheduled = e.schedule !== undefined;
     e.schedule = { at: formatCairoTime(new Date(atMs).toISOString()), place };
     e.log.push(`scheduled for ${e.schedule.at} at ${place}`);
     store.saveExchange(e);
+    deps.notify?.emit(otherOf(e, userId), rescheduled ? 'schedule-changed' : 'schedule-set', e.id);
     return ok({ exchange: e, safetyNudge: SAFETY_NUDGE });
   }
 
@@ -361,6 +373,7 @@ export function createExchangesService(
         : `done marked by ${userId}`,
     );
     store.saveExchange(e);
+    deps.notify?.emit(otherOf(e, userId), 'completion-requested', e.id);
     return ok(e);
   }
 
@@ -391,6 +404,7 @@ export function createExchangesService(
     e.status = 'Completed';
     e.log.push(`confirmed by ${userId}`);
     store.saveExchange(e);
+    deps.notify?.emit(otherOf(e, userId), 'completion-confirmed', e.id);
     return ok(e);
   }
 
@@ -431,6 +445,8 @@ export function createExchangesService(
       e.status = 'Completed';
       e.log.push('auto-completed after 7-day silence');
       store.saveExchange(e);
+      deps.notify?.emit(e.participantA, 'completion-confirmed', e.id);
+      deps.notify?.emit(e.participantB, 'completion-confirmed', e.id);
     }
     return due;
   }
@@ -467,6 +483,7 @@ export function createExchangesService(
     if (input.detail?.trim()) e.cancelDetail = input.detail.trim();
     e.log.push(`cancelled by ${userId}: ${input.reason}`);
     store.saveExchange(e);
+    deps.notify?.emit(otherOf(e, userId), 'cancellation', e.id);
     return ok(e);
   }
 
@@ -475,6 +492,18 @@ export function createExchangesService(
     const e = store.getExchange(id);
     if (!e || !isParticipantOf(e, viewerId)) return undefined;
     return e;
+  }
+
+  /**
+   * INTERNAL accessors for case-gated modules (reputation, moderation).
+   * No authz here — callers must enforce their own gates (privacy case access).
+   */
+  function readExchange(id: string): Exchange | undefined {
+    return store.getExchange(id);
+  }
+
+  function readThread(exchangeId: string): Message[] {
+    return store.messagesFor(exchangeId);
   }
 
   /** Participant-only plain-text thread (FR-E-7). No files in MVP. */
@@ -520,7 +549,7 @@ export function createExchangesService(
     return ok(store.messagesFor(exchangeId));
   }
 
-  return { propose, getProposal, respond, withdraw, runExpiry, lockStatus, openCount, schedule, markDone, confirm, dispute, runAutoComplete, cancel, getExchange, postMessage, getMessages, store };
+  return { propose, getProposal, respond, withdraw, runExpiry, lockStatus, openCount, schedule, markDone, confirm, dispute, runAutoComplete, cancel, getExchange, readExchange, readThread, postMessage, getMessages, store };
 }
 
 const CANCEL_REASONS: CancelReason[] = ['no-show', 'conflict', 'item-unavailable', 'safety-concern', 'other'];

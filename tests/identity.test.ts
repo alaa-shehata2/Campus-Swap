@@ -111,4 +111,62 @@ describe('identity', () => {
     assert.equal(svc.isBlockedOrMuted(aid, bid), false);
     assert.throws(() => svc.block(aid, aid), /cannot block yourself/i);
   });
+
+  it('restrict suspends/bans: login blocked, badge shown', () => {
+    const svc = createIdentityService();
+    const r = svc.register({ ...BASE, email: 'r@gmail.com' });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    svc.restrict(r.value.id, 'suspended');
+    assert.equal(svc.getProfile(r.value.id)?.restriction, 'suspended');
+    const login = svc.authenticate('r@gmail.com', 'password1');
+    assert.equal(login.ok, false);
+    if (!login.ok) assert.ok(login.errors.some((e) => e.code === 'account-suspended'));
+    svc.restrict(r.value.id, 'none');
+    assert.equal(svc.authenticate('r@gmail.com', 'password1').ok, true);
+  });
+
+  it('deactivate hides profile and blocks login immediately', () => {
+    const svc = createIdentityService();
+    const r = svc.register({ ...BASE, email: 'd@gmail.com' });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    svc.deactivate(r.value.id);
+    assert.equal(svc.getProfile(r.value.id), undefined);
+    assert.equal(svc.authenticate('d@gmail.com', 'password1').ok, false);
+  });
+
+  it('restrict/deactivate revoke live sessions', () => {
+    const svc = createIdentityService();
+    const r = svc.register({ ...BASE, email: 's2@gmail.com' });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    const auth = svc.authenticate('s2@gmail.com', 'password1');
+    assert.equal(auth.ok, true);
+    if (!auth.ok) return;
+    svc.restrict(r.value.id, 'suspended');
+    assert.equal(svc.resolveSession(auth.value.token), undefined);
+  });
+
+  it('setRole promotes to moderator (bootstrap; HTTP layer gates in production)', () => {
+    const svc = createIdentityService();
+    const r = svc.register({ ...BASE, email: 'm@gmail.com' });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(svc.getProfile(r.value.id)?.role, 'member');
+    svc.setRole('bootstrap', r.value.id, 'moderator');
+    assert.equal(svc.getProfile(r.value.id)?.role, 'moderator');
+  });
+
+  it('once a moderator exists, only moderators assign roles', () => {
+    const svc = createIdentityService();
+    const m = svc.register({ ...BASE, email: 'm2@gmail.com' });
+    const u = svc.register({ ...BASE, email: 'u2@gmail.com' });
+    assert.equal(m.ok && u.ok, true);
+    if (!m.ok || !u.ok) return;
+    svc.setRole('bootstrap', m.value.id, 'moderator');
+    assert.throws(() => svc.setRole(u.value.id, u.value.id, 'moderator'), /only moderators/i);
+    svc.setRole(m.value.id, u.value.id, 'moderator');
+    assert.equal(svc.getProfile(u.value.id)?.role, 'moderator');
+  });
 });

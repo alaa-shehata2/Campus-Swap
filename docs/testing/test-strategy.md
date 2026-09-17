@@ -30,6 +30,18 @@ module was implemented.
 | `tests/completion.test.ts` | `exchanges.markDone/confirm/dispute/runAutoComplete/cancel` | full Done→Confirm loop, self-confirm rejected, schedule-less needs override + reason, dispute → Disputed, 7-day window enforced, auto-complete with log, cancel needs reason code, terminal states final (FR-E-4/6, BL-09) |
 | `tests/thread.test.ts` | `exchanges.postMessage/getMessages` + `identity.block/mute` | participant-only post/read, blocked-pair reject, empty/over-long rejected (FR-E-7, FR-M-6, BL-10) |
 
+## Seam tests (Phase 3, implemented)
+
+| Suite | Seam | Covers |
+|---|---|---|
+| `tests/reviews.test.ts` | `reputation.submitReview/editReview/revealDue` | Completed-only, one-per-participant, score/text validation, pre-reveal invisibility, both-in + 14-day reveal, 48h edit (FR-R-1/2, BL-11) |
+| `tests/reviews.test.ts` (aggregate/response/void) | `reputation.aggregate/respondToReview/voidReview` | no reviews on Cancelled, aggregate consistency, one reviewee response, void excludes + logged + immutable (FR-R-3..5, BL-11) |
+| `tests/moderation.test.ts` | `moderation.report/triage/sanction/unhide/voidReview` | reason codes, other-needs-20, ≤3 images, Received→Under review→Resolved, hide/unhide lifecycle, suspend blocks login, audit fields (FR-M-1..4, BL-12/13) |
+| `tests/moderation.test.ts` (stolen) | `moderation.report/escalate` | hide-first + instant case, handover gated on owner approval, evidence preserved (FR-M-5, BL-13) |
+| `tests/notifications.test.ts` | `notifications.emit/inbox` + `lendReminderKind` | one unread item per emit, all 16 FR-N-1 types, zero emails (no transport), T-3d/T+0/T+3d/overdue (FR-N-1, BL-14) |
+| `tests/notifications-wiring.test.ts` | cross-module emits | proposal/schedule/completion notifications, no pre-reveal leak, reporter-only updates, void/unhide/handover notices |
+| `tests/privacy.test.ts` | `privacy` + `moderation.viewThread` | 12/24-mo retention boundaries, deactivation hides discovery, purpose-scoped thread reads denied+logged/allowed+logged (P-3/P-4) |
+
 ## Planned (later phases)
 
 - Phase 3: blind-reveal/response/aggregate, report/triage/sanction/

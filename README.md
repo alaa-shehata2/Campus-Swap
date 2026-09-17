@@ -19,6 +19,13 @@ cap) → accept/decline/withdraw/7-day expiry → auto-pause on accept →
 Scheduled exchange (Cairo time + place, public-spot nudge) → two-step
 completion / cancellation with reason → participant text thread → block/mute.
 
+**Phase 3 implemented** (Reviews + Reports + Moderation + Notifications —
+roadmap J5–J6, backlog BL-11..BL-14): blind bilateral reviews + response +
+aggregate; report flow with reason codes + triage states; moderation sanctions
+(hide/warn/suspend/ban) with audit log; stolen-item hide-first + approved
+handover; in-app notification inbox (no email); retention clocks + case-gated
+moderator reads.
+
 What works (vertical slice):
 
 - Visitor browses/searches KFS listings without login; actions show a login CTA.
@@ -58,5 +65,6 @@ docs/
 - Test strategy: `docs/testing/test-strategy.md`
 - Phase 1 plan: `docs/superpowers/plans/2026-09-17-phase-1-identity-listings-discovery.md`
 - Phase 2 plan: `docs/superpowers/plans/2026-09-17-phase-2-proposals-exchanges.md`
+- Phase 3 plan: `docs/superpowers/plans/2026-09-17-phase-3-reviews-moderation-notifications.md`
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before changing code.

@@ -93,7 +93,7 @@ export function createListingsService(store = new ListingsStore()) {
       errors.push({
         code: 'invalid',
         field: 'status',
-        message: 'Status must be Draft, Active, Paused, or Archived.',
+        message: 'Status must be Draft, Active, Paused, or Archived (Hidden is moderation-only).',
       });
     }
 
@@ -251,6 +251,15 @@ export function createListingsService(store = new ListingsStore()) {
     if (listing.ownerId !== ownerId) {
       return fail([{ code: 'not-permitted', message: 'Only the owner can change this listing.' }]);
     }
+    if (listing.status === 'Hidden') {
+      return fail([
+        {
+          code: 'invalid-transition',
+          field: 'status',
+          message: 'Hidden listings can only be restored by moderation.',
+        },
+      ]);
+    }
     if (to === 'activate') {
       if (listing.status !== 'Draft') {
         return fail([
@@ -314,11 +323,58 @@ export function createListingsService(store = new ListingsStore()) {
     return ok(listing);
   }
 
+  /**
+   * Moderation hide (FR-M-4). INTERNAL: moderation-only, audit-logged by the caller.
+   * Hidden listings leave discovery automatically (only Active is discoverable).
+   */
+  function systemHide(id: string): Result<Listing> {
+    const listing = store.get(id);
+    if (!listing) return fail([{ code: 'not-found', message: 'Listing not found.' }]);
+    if (listing.status !== 'Active' && listing.status !== 'Paused') {
+      return fail([
+        { code: 'invalid-transition', field: 'status', message: 'Only Active or Paused listings can be hidden.' },
+      ]);
+    }
+    listing.status = 'Hidden';
+    store.save(listing);
+    return ok(listing);
+  }
+
+  /**
+   * Moderation restore (reverses hide). Parks as Paused so the owner
+   * deliberately reopens — no surprise discoverability, cap still applies.
+   */
+  function systemUnhide(id: string): Result<Listing> {
+    const listing = store.get(id);
+    if (!listing) return fail([{ code: 'not-found', message: 'Listing not found.' }]);
+    if (listing.status !== 'Hidden') {
+      return fail([
+        { code: 'invalid-transition', field: 'status', message: 'Only Hidden listings can be restored.' },
+      ]);
+    }
+    listing.status = 'Paused';
+    store.save(listing);
+    return ok(listing);
+  }
+
+  /** Deactivation cascade (P-3): archive everything still discoverable or paused. */
+  function deactivateOwner(ownerId: string): number {
+    let count = 0;
+    for (const l of store.all()) {
+      if (l.ownerId === ownerId && (l.status === 'Active' || l.status === 'Paused')) {
+        l.status = 'Archived';
+        store.save(l);
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   function get(id: string): Listing | undefined {
     return store.get(id);
   }
 
-  return { publish, update, transition, systemPause, get, store };
+  return { publish, update, transition, systemPause, systemHide, systemUnhide, deactivateOwner, get, store };
 }
 
 export type ListingsService = ReturnType<typeof createListingsService>;

@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-09-17 — Phase 3: Reviews + Reports + Moderation + Notifications (BL-11..BL-14)
+
+- Reputation seam: blind bilateral reviews (one 1–5 + ≤1000 text per
+  participant, Completed-only), both-in/14-day reveal, 48h edit, aggregate
+  (average + count + distribution + history), one reviewee response, logged
+  moderation voids.
+- Moderation seam: reports with reason codes + triage states, sanctions
+  (hide/warn/suspend/ban/unhide) with actor+reason+timestamp audit, stolen
+  hide-first with instant case, owner-approved handover with preserved
+  evidence; no delete APIs.
+- Seams: listings `Hidden` state + systemHide/systemUnhide + owner
+  deactivate cascade; identity restrict (suspend/ban enforced at login) +
+  deactivate (profile hidden, login blocked); exchanges internal
+  readExchange/readThread for case-gated modules.
+- Notifications sink: in-app inbox for all 16 FR-N-1 event types, zero
+  emails; lend-reminder helper. Domain events wired: proposals, schedule,
+  completion, reveal/response, report lifecycle, sanctions, voids, handovers.
+- Privacy: 12-mo message / 24-mo log retention clocks, purpose-scoped
+  moderator reads (open report on the exchange's listings/participants;
+  denied + logged otherwise).
+- Moderator-role guards on all triage/sanction/handover powers; sessions
+  revoked on restrict/deactivate; handover needs a second-moderator approver.
+- 101 tests green (`npm test`), `tsc --noEmit` clean.
+
 ## 2026-09-17 — Phase 2: Proposals + Exchange + Scheduling + Completion (BL-07..BL-10)
 
 - Exchanges seam: reciprocal proposals (≥1 listing/side, terms required),

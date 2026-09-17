@@ -220,7 +220,8 @@ describe('listings', () => {
     if (!r.ok) assert.ok(r.errors.some((e) => e.field === 'status'));
   });
 
-  it('edits category/zone/images on update with validation', () => {    const svc = createListingsService();
+  it('edits category/zone/images on update with validation', () => {
+    const svc = createListingsService();
     const created = svc.publish('u1', {
       side: 'offer',
       kind: 'skill',
@@ -260,5 +261,25 @@ describe('listings', () => {
     if (paused.ok) assert.equal(paused.value.status, 'Paused');
     assert.equal(svc.systemPause(created.value.id).ok, false);
     assert.equal(svc.systemPause('missing').ok, false);
+  });
+
+  it('systemHide removes from discovery; owner transitions rejected; unhide parks as Paused', () => {
+    const svc = createListingsService();
+    const created = svc.publish('u1', {
+      side: 'offer',
+      kind: 'skill',
+      title: 'Python tutoring',
+      description: 'I teach Python basics.',
+      category: 'tutoring',
+      zone: 'North campus',
+      images: [],
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    assert.equal(svc.systemHide(created.value.id).ok, true);
+    assert.equal(svc.get(created.value.id)?.status, 'Hidden');
+    assert.equal(svc.transition('u1', created.value.id, 'reopen').ok, false);
+    assert.equal(svc.systemUnhide(created.value.id).ok, true);
+    assert.equal(svc.get(created.value.id)?.status, 'Paused');
   });
 });

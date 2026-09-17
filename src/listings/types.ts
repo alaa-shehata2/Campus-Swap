@@ -2,7 +2,7 @@ import type { Category } from '../policy/taxonomy.js';
 
 export type ListingSide = 'offer' | 'request';
 export type ListingKind = 'skill' | 'item';
-export type ListingStatus = 'Draft' | 'Active' | 'Paused' | 'Archived';
+export type ListingStatus = 'Draft' | 'Active' | 'Paused' | 'Archived' | 'Hidden';
 export type ItemModality = 'lend' | 'give' | 'swap';
 
 export interface PublishInput {
