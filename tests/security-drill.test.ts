@@ -13,26 +13,26 @@ const HOUR_MS = 60 * 60 * 1000;
  * the full Received → Under review → Resolved path inside the 48h pilot SLA.
  */
 describe('security triage drill', () => {
-  it('fixture report is triaged end-to-end within SLA', () => {
+  it('fixture report is triaged end-to-end within SLA', async () => {
     const identity = createIdentityService();
     const listings = createListingsService();
-    const reporter = identity.register({
+    const reporter = await identity.register({
       email: 'drill-reporter@gmail.com', password: 'password1', displayName: 'Drill Reporter',
       campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
     });
-    const owner = identity.register({
+    const owner = await identity.register({
       email: 'drill-owner@gmail.com', password: 'password1', displayName: 'Drill Owner',
       campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
     });
-    const mod = identity.register({
+    const mod = await identity.register({
       email: 'drill-mod@gmail.com', password: 'password1', displayName: 'Drill Mod',
       campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
     });
     assert.equal(reporter.ok && owner.ok && mod.ok, true);
     if (!reporter.ok || !owner.ok || !mod.ok) return;
-    identity.setRole('bootstrap', mod.value.id, 'moderator');
+    await identity.setRole('bootstrap', mod.value.id, 'moderator');
 
-    const listing = listings.publish(owner.value.id, {
+    const listing = await listings.publish(owner.value.id, {
       side: 'offer', kind: 'item', title: 'Fixture phone for drill',
       description: 'Seeded fixture for the triage drill; handled as a policy case.',
       category: 'electronics', zone: 'Dorms', images: [], modality: 'give',
@@ -48,7 +48,7 @@ describe('security triage drill', () => {
       { now: () => now },
     );
 
-    const report = moderation.report(reporter.value.id, {
+    const report = await moderation.report(reporter.value.id, {
       targetType: 'listing', targetId: listing.value.id,
       reasonCode: 'spam-commercial', description: 'Drill fixture: commercial storefront link.',
       images: [],
@@ -58,9 +58,9 @@ describe('security triage drill', () => {
     assert.equal(report.value.status, 'Received');
 
     now += 5 * HOUR_MS;
-    assert.equal(moderation.triage(report.value.id, mod.value.id, 'acknowledge').ok, true);
+    assert.equal((await moderation.triage(report.value.id, mod.value.id, 'acknowledge')).ok, true);
     now += 20 * HOUR_MS;
-    const resolved = moderation.triage(report.value.id, mod.value.id, 'resolve');
+    const resolved = await moderation.triage(report.value.id, mod.value.id, 'resolve');
     assert.equal(resolved.ok, true);
     if (!resolved.ok) return;
     assert.equal(resolved.value.status, 'Resolved');

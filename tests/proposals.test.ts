@@ -6,10 +6,10 @@ import { createExchangesService } from '../src/exchanges/service.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function setup() {
+async function setup() {
   const identity = createIdentityService();
   const listings = createListingsService();
-  const alice = identity.register({
+  const alice = await identity.register({
     email: 'alice@gmail.com',
     password: 'password1',
     displayName: 'Alice',
@@ -17,7 +17,7 @@ function setup() {
     ageConfirmed18: true,
     rulesAccepted: true,
   });
-  const bob = identity.register({
+  const bob = await identity.register({
     email: 'bob@gmail.com',
     password: 'password1',
     displayName: 'Bob',
@@ -30,7 +30,7 @@ function setup() {
   const aid = alice.value.id;
   const bid = bob.value.id;
 
-  const offer = listings.publish(aid, {
+  const offer = await listings.publish(aid, {
     side: 'offer',
     kind: 'skill',
     title: 'Python tutoring',
@@ -39,7 +39,7 @@ function setup() {
     zone: 'North campus',
     images: [],
   });
-  const request = listings.publish(bid, {
+  const request = await listings.publish(bid, {
     side: 'request',
     kind: 'skill',
     title: 'Need Python help',
@@ -60,9 +60,9 @@ function setup() {
 }
 
 describe('proposals', () => {
-  it('creates a reciprocal proposal linking one listing per side', () => {
-    const { exchanges, aid, offer, request } = setup();
-    const r = exchanges.propose(aid, {
+  it('creates a reciprocal proposal linking one listing per side', async () => {
+    const { exchanges, aid, offer, request } = await setup();
+    const r = await exchanges.propose(aid, {
       sideAListingIds: [offer.id],
       sideBListingIds: [request.id],
       terms: 'Two one-hour sessions this week.',
@@ -71,9 +71,9 @@ describe('proposals', () => {
     if (r.ok) assert.equal(r.value.status, 'Proposed');
   });
 
-  it('rejects one-sided proposals', () => {
-    const { exchanges, aid, offer } = setup();
-    const r = exchanges.propose(aid, {
+  it('rejects one-sided proposals', async () => {
+    const { exchanges, aid, offer } = await setup();
+    const r = await exchanges.propose(aid, {
       sideAListingIds: [offer.id],
       sideBListingIds: [],
       terms: 'Free help, no return.',
@@ -82,9 +82,9 @@ describe('proposals', () => {
     if (!r.ok) assert.ok(r.errors.some((e) => e.code === 'one-sided'));
   });
 
-  it('rejects proposals where side B is not a single other owner', () => {
-    const { exchanges, aid, offer } = setup();
-    const r = exchanges.propose(aid, {
+  it('rejects proposals where side B is not a single other owner', async () => {
+    const { exchanges, aid, offer } = await setup();
+    const r = await exchanges.propose(aid, {
       sideAListingIds: [offer.id],
       sideBListingIds: [offer.id],
       terms: 'Self-deal.',
@@ -92,10 +92,10 @@ describe('proposals', () => {
     assert.equal(r.ok, false);
   });
 
-  it('holds 5 open proposals; the 6th is rejected with proposal-cap-reached', () => {
-    const { listings, exchanges, aid, request } = setup();
+  it('holds 5 open proposals; the 6th is rejected with proposal-cap-reached', async () => {
+    const { listings, exchanges, aid, request } = await setup();
     for (let i = 0; i < 5; i++) {
-      const extra = listings.publish(aid, {
+      const extra = await listings.publish(aid, {
         side: 'offer',
         kind: 'skill',
         title: `Lesson ${i}`,
@@ -106,15 +106,15 @@ describe('proposals', () => {
       });
       assert.equal(extra.ok, true);
       if (!extra.ok) return;
-      const p = exchanges.propose(aid, {
+      const p = await exchanges.propose(aid, {
         sideAListingIds: [extra.value.id],
         sideBListingIds: [request.id],
         terms: `Deal ${i}.`,
       });
       assert.equal(p.ok, true);
     }
-    const sixth = exchanges.propose(aid, {
-      sideAListingIds: [(listings.publish(aid, {
+    const sixth = await exchanges.propose(aid, {
+      sideAListingIds: [(await listings.publish(aid, {
         side: 'offer', kind: 'skill', title: 'Sixth lesson', description: 'Sixth offer.',
         category: 'tutoring', zone: 'North campus', images: [],
       }) as { ok: true; value: { id: string } }).value.id],
@@ -126,44 +126,44 @@ describe('proposals', () => {
       assert.ok(sixth.errors.some((e) => e.code === 'proposal-cap-reached'));
       assert.match(sixth.errors[0]?.message ?? '', /another listing|check back/i);
     }
-    const lock = exchanges.lockStatus(request.id);
+    const lock = await exchanges.lockStatus(request.id);
     assert.equal(lock.locked, true);
     assert.equal(lock.openCount, 5);
   });
 
-  it('withdrawal allowed pre-accept by either side; frees a cap slot', () => {
-    const { exchanges, aid, bid, offer, request } = setup();
-    const p = exchanges.propose(aid, {
+  it('withdrawal allowed pre-accept by either side; frees a cap slot', async () => {
+    const { exchanges, aid, bid, offer, request } = await setup();
+    const p = await exchanges.propose(aid, {
       sideAListingIds: [offer.id],
       sideBListingIds: [request.id],
       terms: 'Two sessions.',
     });
     assert.equal(p.ok, true);
     if (!p.ok) return;
-    const w = exchanges.withdraw(bid, p.value.id);
+    const w = await exchanges.withdraw(bid, p.value.id);
     assert.equal(w.ok, true);
     if (w.ok) assert.equal(w.value.status, 'Withdrawn');
-    assert.equal(exchanges.lockStatus(request.id).openCount, 0);
+    assert.equal((await exchanges.lockStatus(request.id)).openCount, 0);
   });
 
-  it('counterparty declines; proposer cannot decline own proposal', () => {
-    const { exchanges, aid, bid, offer, request } = setup();
-    const p = exchanges.propose(aid, {
+  it('counterparty declines; proposer cannot decline own proposal', async () => {
+    const { exchanges, aid, bid, offer, request } = await setup();
+    const p = await exchanges.propose(aid, {
       sideAListingIds: [offer.id],
       sideBListingIds: [request.id],
       terms: 'Two sessions.',
     });
     assert.equal(p.ok, true);
     if (!p.ok) return;
-    assert.equal(exchanges.respond(aid, p.value.id, 'decline').ok, false);
-    const d = exchanges.respond(bid, p.value.id, 'decline');
+    assert.equal((await exchanges.respond(aid, p.value.id, 'decline')).ok, false);
+    const d = await exchanges.respond(bid, p.value.id, 'decline');
     assert.equal(d.ok, true);
     if (d.ok && 'status' in d.value) assert.equal(d.value.status, 'Declined');
   });
 
-  it('proposals expire after 7 days via runExpiry', () => {
-    const ctx = setup();
-    const p = ctx.exchanges.propose(ctx.aid, {
+  it('proposals expire after 7 days via runExpiry', async () => {
+    const ctx = await setup();
+    const p = await ctx.exchanges.propose(ctx.aid, {
       sideAListingIds: [ctx.offer.id],
       sideBListingIds: [ctx.request.id],
       terms: 'Two sessions.',
@@ -171,16 +171,16 @@ describe('proposals', () => {
     assert.equal(p.ok, true);
     if (!p.ok) return;
     ctx.setNow(ctx.now() + 8 * DAY_MS);
-    const expired = ctx.exchanges.runExpiry(ctx.now());
+    const expired = await ctx.exchanges.runExpiry(ctx.now());
     assert.equal(expired.length, 1);
     assert.equal(expired[0]?.status, 'Expired');
-    assert.equal(ctx.exchanges.lockStatus(ctx.request.id).openCount, 0);
+    assert.equal((await ctx.exchanges.lockStatus(ctx.request.id)).openCount, 0);
   });
 
-  it('blocked pairs cannot propose', () => {
-    const { identity, exchanges, aid, bid, offer, request } = setup();
-    identity.block(aid, bid);
-    const r = exchanges.propose(bid, {
+  it('blocked pairs cannot propose', async () => {
+    const { identity, exchanges, aid, bid, offer, request } = await setup();
+    await identity.block(aid, bid);
+    const r = await exchanges.propose(bid, {
       sideAListingIds: [request.id],
       sideBListingIds: [offer.id],
       terms: 'Blocked deal.',
@@ -189,34 +189,34 @@ describe('proposals', () => {
     if (!r.ok) assert.ok(r.errors.some((e) => e.code === 'blocked'));
   });
 
-  it('decline frees a cap slot', () => {
-    const { exchanges, aid, bid, offer, request } = setup();
-    const p = exchanges.propose(aid, {
+  it('decline frees a cap slot', async () => {
+    const { exchanges, aid, bid, offer, request } = await setup();
+    const p = await exchanges.propose(aid, {
       sideAListingIds: [offer.id],
       sideBListingIds: [request.id],
       terms: 'Deal.',
     });
     assert.equal(p.ok, true);
     if (!p.ok) return;
-    assert.equal(exchanges.lockStatus(request.id).openCount, 1);
-    assert.equal(exchanges.respond(bid, p.value.id, 'decline').ok, true);
-    assert.equal(exchanges.lockStatus(request.id).openCount, 0);
+    assert.equal((await exchanges.lockStatus(request.id)).openCount, 1);
+    assert.equal((await exchanges.respond(bid, p.value.id, 'decline')).ok, true);
+    assert.equal((await exchanges.lockStatus(request.id)).openCount, 0);
   });
 
-  it('withdraw-after-accept and respond-after-expiry are rejected', () => {
-    const ctx = setup();
-    const p = ctx.exchanges.propose(ctx.aid, {
+  it('withdraw-after-accept and respond-after-expiry are rejected', async () => {
+    const ctx = await setup();
+    const p = await ctx.exchanges.propose(ctx.aid, {
       sideAListingIds: [ctx.offer.id],
       sideBListingIds: [ctx.request.id],
       terms: 'Deal.',
     });
     assert.equal(p.ok, true);
     if (!p.ok) return;
-    assert.equal(ctx.exchanges.respond(ctx.bid, p.value.id, 'accept').ok, true);
-    assert.equal(ctx.exchanges.withdraw(ctx.aid, p.value.id).ok, false);
+    assert.equal((await ctx.exchanges.respond(ctx.bid, p.value.id, 'accept')).ok, true);
+    assert.equal((await ctx.exchanges.withdraw(ctx.aid, p.value.id)).ok, false);
 
-    const ctx2 = setup();
-    const q = ctx2.exchanges.propose(ctx2.aid, {
+    const ctx2 = await setup();
+    const q = await ctx2.exchanges.propose(ctx2.aid, {
       sideAListingIds: [ctx2.offer.id],
       sideBListingIds: [ctx2.request.id],
       terms: 'Deal.',
@@ -224,7 +224,7 @@ describe('proposals', () => {
     assert.equal(q.ok, true);
     if (!q.ok) return;
     ctx2.setNow(ctx2.now() + 8 * DAY_MS);
-    ctx2.exchanges.runExpiry(ctx2.now());
-    assert.equal(ctx2.exchanges.respond(ctx2.bid, q.value.id, 'decline').ok, false);
+    await ctx2.exchanges.runExpiry(ctx2.now());
+    assert.equal((await ctx2.exchanges.respond(ctx2.bid, q.value.id, 'decline')).ok, false);
   });
 });

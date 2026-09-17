@@ -12,6 +12,8 @@ export interface PublishInput {
   description: string;
   category: string;
   zone: string;
+  /** Free-text availability window (e.g. "weekday evenings"). No calendars in MVP. */
+  availability?: string;
   images: string[];
   status?: ListingStatus;
   /** Required for kind=item. */
@@ -31,6 +33,7 @@ export interface Listing {
   description: string;
   category: Category;
   zone: string;
+  availability?: string;
   images: string[];
   status: ListingStatus;
   modality?: ItemModality;

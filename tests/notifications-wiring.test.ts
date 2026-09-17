@@ -7,26 +7,26 @@ import { createReputationService } from '../src/reputation/service.js';
 import { createModerationService } from '../src/moderation/service.js';
 import { createNotificationsService } from '../src/notifications/service.js';
 
-function setup() {
+async function setup() {
   const notify = createNotificationsService();
   const identity = createIdentityService();
   const listings = createListingsService();
-  const a = identity.register({
+  const a = await identity.register({
     email: 'alice@gmail.com', password: 'password1', displayName: 'Alice',
     campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
   });
-  const b = identity.register({
+  const b = await identity.register({
     email: 'bob@gmail.com', password: 'password1', displayName: 'Bob',
     campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
   });
   assert.equal(a.ok && b.ok, true);
   if (!a.ok || !b.ok) throw new Error('setup failed');
-  const offer = listings.publish(a.value.id, {
+  const offer = await listings.publish(a.value.id, {
     side: 'offer', kind: 'skill', title: 'Python tutoring',
     description: 'I teach Python basics.', category: 'tutoring',
     zone: 'North campus', images: [],
   });
-  const request = listings.publish(b.value.id, {
+  const request = await listings.publish(b.value.id, {
     side: 'request', kind: 'skill', title: 'Need Python help',
     description: 'Looking for help.', category: 'tutoring',
     zone: 'North campus', images: [],
@@ -40,53 +40,53 @@ function setup() {
 }
 
 describe('notification wiring', () => {
-  it('proposal lifecycle notifies the counterparty side', () => {
-    const { notify, exchanges, aid, bid, offer, request } = setup();
-    const p = exchanges.propose(aid, {
+  it('proposal lifecycle notifies the counterparty side', async () => {
+    const { notify, exchanges, aid, bid, offer, request } = await setup();
+    const p = await exchanges.propose(aid, {
       sideAListingIds: [offer.id], sideBListingIds: [request.id], terms: 'Deal.',
     });
     assert.equal(p.ok, true);
     if (!p.ok) return;
-    assert.ok(notify.inbox(bid).some((i) => i.type === 'proposal-received'));
-    assert.equal(notify.inbox(aid).length, 0);
-    assert.equal(exchanges.respond(bid, p.value.id, 'accept').ok, true);
-    assert.ok(notify.inbox(aid).some((i) => i.type === 'proposal-accepted'));
+    assert.ok((await notify.inbox(bid)).some((i) => i.type === 'proposal-received'));
+    assert.equal((await notify.inbox(aid)).length, 0);
+    assert.equal((await exchanges.respond(bid, p.value.id, 'accept')).ok, true);
+    assert.ok((await notify.inbox(aid)).some((i) => i.type === 'proposal-accepted'));
   });
 
-  it('completion loop notifies; reveal notifies without pre-reveal leak', () => {
-    const { notify, exchanges, reputation, aid, bid, offer, request } = setup();
-    const p = exchanges.propose(aid, {
+  it('completion loop notifies; reveal notifies without pre-reveal leak', async () => {
+    const { notify, exchanges, reputation, aid, bid, offer, request } = await setup();
+    const p = await exchanges.propose(aid, {
       sideAListingIds: [offer.id], sideBListingIds: [request.id], terms: 'Deal.',
     });
     assert.equal(p.ok, true);
     if (!p.ok) return;
-    const acc = exchanges.respond(bid, p.value.id, 'accept');
+    const acc = await exchanges.respond(bid, p.value.id, 'accept');
     assert.equal(acc.ok && 'exchange' in acc.value, true);
     if (!acc.ok || !('exchange' in acc.value)) return;
     const eid = acc.value.exchange.id;
     assert.equal(
-      exchanges.schedule(aid, eid, { at: new Date(Date.now() + 86400000).toISOString(), place: 'Library' }).ok,
+      (await exchanges.schedule(aid, eid, { at: new Date(Date.now() + 86400000).toISOString(), place: 'Library' })).ok,
       true,
     );
-    assert.ok(notify.inbox(bid).some((i) => i.type === 'schedule-set'));
-    assert.equal(exchanges.markDone(aid, eid).ok, true);
-    assert.ok(notify.inbox(bid).some((i) => i.type === 'completion-requested'));
-    assert.equal(exchanges.confirm(bid, eid).ok, true);
-    assert.ok(notify.inbox(aid).some((i) => i.type === 'completion-confirmed'));
+    assert.ok((await notify.inbox(bid)).some((i) => i.type === 'schedule-set'));
+    assert.equal((await exchanges.markDone(aid, eid)).ok, true);
+    assert.ok((await notify.inbox(bid)).some((i) => i.type === 'completion-requested'));
+    assert.equal((await exchanges.confirm(bid, eid)).ok, true);
+    assert.ok((await notify.inbox(aid)).some((i) => i.type === 'completion-confirmed'));
 
     // blind: submit alone notifies nobody; reveal notifies the reviewee
-    assert.equal(reputation.submitReview(aid, eid, { score: 5 }).ok, true);
-    assert.ok(!notify.inbox(bid).some((i) => i.type === 'review-published'));
-    assert.equal(reputation.submitReview(bid, eid, { score: 4 }).ok, true);
-    assert.ok(notify.inbox(bid).some((i) => i.type === 'review-published'));
-    const target = reputation.aggregate(bid).history[0]!;
-    assert.equal(reputation.respondToReview(bid, target.id, { text: 'Thanks!' }).ok, true);
-    assert.ok(notify.inbox(aid).some((i) => i.type === 'review-response'));
+    assert.equal((await reputation.submitReview(aid, eid, { score: 5 })).ok, true);
+    assert.ok(!(await notify.inbox(bid)).some((i) => i.type === 'review-published'));
+    assert.equal((await reputation.submitReview(bid, eid, { score: 4 })).ok, true);
+    assert.ok((await notify.inbox(bid)).some((i) => i.type === 'review-published'));
+    const target = (await reputation.aggregate(bid)).history[0]!;
+    assert.equal((await reputation.respondToReview(bid, target.id, { text: 'Thanks!' })).ok, true);
+    assert.ok((await notify.inbox(aid)).some((i) => i.type === 'review-response'));
   });
 
-  it('report lifecycle notifies reporter; sanction notifies target only on action', () => {
-    const { notify, identity, moderation, aid, bid, request } = setup();
-    const r = moderation.report(aid, {
+  it('report lifecycle notifies reporter; sanction notifies target only on action', async () => {
+    const { notify, identity, moderation, aid, bid, request } = await setup();
+    const r = await moderation.report(aid, {
       targetType: 'listing', targetId: request.id,
       reasonCode: 'spam-commercial', description: 'Commercial storefront link in description.',
       images: [],
@@ -94,83 +94,83 @@ describe('notification wiring', () => {
     assert.equal(r.ok, true);
     if (!r.ok) return;
     // mere report: reporter updated, reported party silent
-    assert.ok(notify.inbox(aid).some((i) => i.type === 'report-status'));
-    assert.equal(notify.inbox(bid).length, 0);
+    assert.ok((await notify.inbox(aid)).some((i) => i.type === 'report-status'));
+    assert.equal((await notify.inbox(bid)).length, 0);
   });
 
-  it('void, unhide, and handover notify the affected users', () => {
-    const { notify, identity, listings, moderation, reputation, exchanges, aid, bid, offer, request } = setup();
-    const mod = identity.register({
+  it('void, unhide, and handover notify the affected users', async () => {
+    const { notify, identity, listings, moderation, reputation, exchanges, aid, bid, offer, request } = await setup();
+    const mod = await identity.register({
       email: 'mod@gmail.com', password: 'password1', displayName: 'Mod',
       campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
     });
-    const mod2 = identity.register({
+    const mod2 = await identity.register({
       email: 'mod2@gmail.com', password: 'password1', displayName: 'Mod2',
       campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
     });
     assert.equal(mod.ok && mod2.ok, true);
     if (!mod.ok || !mod2.ok) return;
-    identity.setRole('bootstrap', mod.value.id, 'moderator');
-    identity.setRole(mod.value.id, mod2.value.id, 'moderator');
+    await identity.setRole('bootstrap', mod.value.id, 'moderator');
+    await identity.setRole(mod.value.id, mod2.value.id, 'moderator');
 
     // hide → owner notified; unhide → owner notified
     assert.equal(
-      moderation.sanction(mod.value.id, {
+      (await moderation.sanction(mod.value.id, {
         action: 'hide', targetType: 'listing', targetId: offer.id, reason: 'Spam.',
-      }).ok,
+      })).ok,
       true,
     );
-    assert.ok(notify.inbox(aid).some((i) => i.type === 'moderation-action'));
-    assert.equal(moderation.unhide(mod.value.id, offer.id, 'Appeal upheld.').ok, true);
-    assert.equal(listings.transition(aid, offer.id, 'reopen').ok, true);
+    assert.ok((await notify.inbox(aid)).some((i) => i.type === 'moderation-action'));
+    assert.equal((await moderation.unhide(mod.value.id, offer.id, 'Appeal upheld.')).ok, true);
+    assert.equal((await listings.transition(aid, offer.id, 'reopen')).ok, true);
 
     // stolen handover → reporter notified
-    const stolen = moderation.report(aid, {
+    const stolen = await moderation.report(aid, {
       targetType: 'listing', targetId: request.id,
       reasonCode: 'stolen-goods', description: 'Serial-less laptop, seller evasive about origin.',
       images: [],
     });
     assert.equal(stolen.ok, true);
     if (!stolen.ok) return;
-    const before = notify.inbox(aid).filter((i) => i.type === 'report-status').length;
+    const before = await notify.inbox(aid).filter((i) => i.type === 'report-status').length;
     assert.equal(
-      moderation.escalate(stolen.value.id, mod.value.id, { ownerApprovedBy: mod2.value.id }).ok,
+      (await moderation.escalate(stolen.value.id, mod.value.id, { ownerApprovedBy: mod2.value.id })).ok,
       true,
     );
-    assert.equal(notify.inbox(aid).filter((i) => i.type === 'report-status').length, before + 1);
+    assert.equal((await notify.inbox(aid)).filter((i) => i.type === 'report-status').length, before + 1);
 
     // void → reviewee notified (fresh listings: request was hidden by the stolen path)
-    const offer2 = listings.publish(aid, {
+    const offer2 = await listings.publish(aid, {
       side: 'offer', kind: 'skill', title: 'Guitar lessons',
       description: 'I teach guitar basics.', category: 'music',
       zone: 'North campus', images: [],
     });
-    const request2 = listings.publish(bid, {
+    const request2 = await listings.publish(bid, {
       side: 'request', kind: 'skill', title: 'Need guitar help',
       description: 'Looking for help.', category: 'music',
       zone: 'North campus', images: [],
     });
     assert.equal(offer2.ok && request2.ok, true);
     if (!offer2.ok || !request2.ok) return;
-    const p = exchanges.propose(aid, {
+    const p = await exchanges.propose(aid, {
       sideAListingIds: [offer2.value.id], sideBListingIds: [request2.value.id], terms: 'Deal.',
     });
     assert.equal(p.ok, true);
     if (!p.ok) return;
-    const acc = exchanges.respond(bid, p.value.id, 'accept');
+    const acc = await exchanges.respond(bid, p.value.id, 'accept');
     assert.equal(acc.ok && 'exchange' in acc.value, true);
     if (!acc.ok || !('exchange' in acc.value)) return;
     const eid = acc.value.exchange.id;
     assert.equal(
-      exchanges.schedule(aid, eid, { at: new Date(Date.now() + 86400000).toISOString(), place: 'Library' }).ok,
+      (await exchanges.schedule(aid, eid, { at: new Date(Date.now() + 86400000).toISOString(), place: 'Library' })).ok,
       true,
     );
-    assert.equal(exchanges.markDone(aid, eid).ok, true);
-    assert.equal(exchanges.confirm(bid, eid).ok, true);
-    assert.equal(reputation.submitReview(aid, eid, { score: 1, text: 'Abuse.' }).ok, true);
-    assert.equal(reputation.submitReview(bid, eid, { score: 5 }).ok, true);
-    const target = reputation.aggregate(bid).history[0]!;
-    assert.equal(moderation.voidReview(mod.value.id, target.id, 'Abusive content.').ok, true);
-    assert.ok(notify.inbox(bid).some((i) => i.type === 'moderation-action'));
+    assert.equal((await exchanges.markDone(aid, eid)).ok, true);
+    assert.equal((await exchanges.confirm(bid, eid)).ok, true);
+    assert.equal((await reputation.submitReview(aid, eid, { score: 1, text: 'Abuse.' })).ok, true);
+    assert.equal((await reputation.submitReview(bid, eid, { score: 5 })).ok, true);
+    const target = (await reputation.aggregate(bid)).history[0]!;
+    assert.equal((await moderation.voidReview(mod.value.id, target.id, 'Abusive content.')).ok, true);
+    assert.ok((await notify.inbox(bid)).some((i) => i.type === 'moderation-action'));
   });
 });

@@ -22,22 +22,22 @@ export class ExchangesStore {
   /** listingId → exchangeId holding it via auto-pause. Lazy: counts only while listing still Paused. */
   private holds = new Map<string, string>();
 
-  insertProposal(p: Omit<Proposal, 'id'>): Proposal {
+  async insertProposal(p: Omit<Proposal, 'id'>): Promise<Proposal> {
     const full: Proposal = { ...p, id: randomUUID() };
     this.proposals.set(full.id, full);
     return cloneProposal(full);
   }
 
-  getProposal(id: string): Proposal | undefined {
+  async getProposal(id: string): Promise<Proposal | undefined> {
     const p = this.proposals.get(id);
     return p ? cloneProposal(p) : undefined;
   }
 
-  saveProposal(p: Proposal): void {
+  async saveProposal(p: Proposal): Promise<void> {
     this.proposals.set(p.id, cloneProposal(p));
   }
 
-  openProposalsForListing(listingId: string): Proposal[] {
+  async openProposalsForListing(listingId: string): Promise<Proposal[]> {
     const out: Proposal[] = [];
     for (const p of this.proposals.values()) {
       if (p.status !== 'Proposed') continue;
@@ -48,14 +48,14 @@ export class ExchangesStore {
     return out;
   }
 
-  proposedOlderThan(nowMs: number, windowMs: number): Proposal[] {    const out: Proposal[] = [];
+  async proposedOlderThan(nowMs: number, windowMs: number): Promise<Proposal[]> {    const out: Proposal[] = [];
     for (const p of this.proposals.values()) {
       if (p.status === 'Proposed' && nowMs - p.createdAtMs > windowMs) out.push(cloneProposal(p));
     }
     return out;
   }
 
-  doneMarkedOlderThan(nowMs: number, windowMs: number): Exchange[] {
+  async doneMarkedOlderThan(nowMs: number, windowMs: number): Promise<Exchange[]> {
     const out: Exchange[] = [];
     for (const e of this.exchanges.values()) {
       if (
@@ -70,34 +70,34 @@ export class ExchangesStore {
     return out;
   }
 
-  insertExchange(e: Omit<Exchange, 'id'>): Exchange {
+  async insertExchange(e: Omit<Exchange, 'id'>): Promise<Exchange> {
     const full: Exchange = { ...e, id: randomUUID() };
     this.exchanges.set(full.id, full);
     return cloneExchange(full);
   }
 
-  getExchange(id: string): Exchange | undefined {
+  async getExchange(id: string): Promise<Exchange | undefined> {
     const e = this.exchanges.get(id);
     return e ? cloneExchange(e) : undefined;
   }
 
-  saveExchange(e: Exchange): void {
+  async saveExchange(e: Exchange): Promise<void> {
     this.exchanges.set(e.id, cloneExchange(e));
   }
 
-  hold(listingId: string, exchangeId: string): void {
+  async hold(listingId: string, exchangeId: string): Promise<void> {
     this.holds.set(listingId, exchangeId);
   }
 
-  heldBy(listingId: string): string | undefined {
+  async heldBy(listingId: string): Promise<string | undefined> {
     return this.holds.get(listingId);
   }
 
-  release(listingId: string): void {
+  async release(listingId: string): Promise<void> {
     this.holds.delete(listingId);
   }
 
-  insertMessage(m: Omit<Message, 'id'>): Message {
+  async insertMessage(m: Omit<Message, 'id'>): Promise<Message> {
     const full: Message = { ...m, id: randomUUID() };
     const list = this.messages.get(full.exchangeId) ?? [];
     list.push(full);
@@ -105,16 +105,16 @@ export class ExchangesStore {
     return { ...full };
   }
 
-  messagesFor(exchangeId: string): Message[] {
+  async messagesFor(exchangeId: string): Promise<Message[]> {
     return (this.messages.get(exchangeId) ?? []).map((m) => ({ ...m }));
   }
 
-  exportState(): {
+  async exportState(): Promise<{
     proposals: Proposal[];
     exchanges: Exchange[];
     messages: Record<string, Message[]>;
     holds: Array<[string, string]>;
-  } {
+  }> {
     const messages: Record<string, Message[]> = {};
     for (const [id, list] of this.messages) messages[id] = list.map((m) => ({ ...m }));
     return {
@@ -125,12 +125,12 @@ export class ExchangesStore {
     };
   }
 
-  importState(state: {
+  async importState(state: {
     proposals: Proposal[];
     exchanges: Exchange[];
     messages: Record<string, Message[]>;
     holds: Array<[string, string]>;
-  }): void {
+  }): Promise<void> {
     if (!state || !Array.isArray(state.proposals) || !Array.isArray(state.exchanges)) {
       throw new Error('Invalid exchanges snapshot.');
     }
@@ -147,7 +147,7 @@ export class ExchangesStore {
   }
 
   /** Exchange/proposal counts per state for pilot metrics (NFR-O-1). */
-  exchangeStats(): Record<ExchangeStatus, number> {
+  async exchangeStats(): Promise<Record<ExchangeStatus, number>> {
     const counts: Record<ExchangeStatus, number> = {
       Scheduled: 0, Completed: 0, Cancelled: 0, Disputed: 0,
     };
@@ -155,7 +155,7 @@ export class ExchangesStore {
     return counts;
   }
 
-  proposalStats(): Record<ProposalStatus, number> {
+  async proposalStats(): Promise<Record<ProposalStatus, number>> {
     const counts: Record<ProposalStatus, number> = {
       Proposed: 0, Accepted: 0, Declined: 0, Expired: 0, Withdrawn: 0,
     };

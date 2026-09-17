@@ -20,12 +20,12 @@ export interface Snapshot {
   version: number;
   takenAtMs: number;
   state: {
-    identity: ReturnType<WorldDeps['identity']['exportUsers']>;
-    listings: ReturnType<WorldDeps['listings']['store']['exportState']>;
-    exchanges: ReturnType<WorldDeps['exchanges']['store']['exportState']>;
-    reputation: ReturnType<WorldDeps['reputation']['store']['exportState']>;
-    moderation: ReturnType<WorldDeps['moderation']['store']['exportState']>;
-    notifications: ReturnType<WorldDeps['notify']['exportState']>;
+    identity: Awaited<ReturnType<WorldDeps['identity']['exportUsers']>>;
+    listings: Awaited<ReturnType<WorldDeps['listings']['store']['exportState']>>;
+    exchanges: Awaited<ReturnType<WorldDeps['exchanges']['store']['exportState']>>;
+    reputation: Awaited<ReturnType<WorldDeps['reputation']['store']['exportState']>>;
+    moderation: Awaited<ReturnType<WorldDeps['moderation']['store']['exportState']>>;
+    notifications: Awaited<ReturnType<WorldDeps['notify']['exportState']>>;
   };
 }
 
@@ -35,23 +35,23 @@ export interface Snapshot {
  * database dump (encrypted at rest, never committed, minimal retention).
  * Sessions are intentionally excluded (users re-login after restore).
  */
-export function createSnapshot(deps: WorldDeps, nowMs = Date.now()): Snapshot {
+export async function createSnapshot(deps: WorldDeps, nowMs = Date.now()): Promise<Snapshot> {
   return {
     version: SNAPSHOT_VERSION,
     takenAtMs: nowMs,
     state: {
-      identity: deps.identity.exportUsers(),
-      listings: deps.listings.store.exportState(),
-      exchanges: deps.exchanges.store.exportState(),
-      reputation: deps.reputation.store.exportState(),
-      moderation: deps.moderation.store.exportState(),
-      notifications: deps.notify.exportState(),
+      identity: await deps.identity.exportUsers(),
+      listings: await deps.listings.store.exportState(),
+      exchanges: await deps.exchanges.store.exportState(),
+      reputation: await deps.reputation.store.exportState(),
+      moderation: await deps.moderation.store.exportState(),
+      notifications: await deps.notify.exportState(),
     },
   };
 }
 
 /** Restore: replaces all store contents with the snapshot (demonstrated by test). */
-export function restoreSnapshot(deps: WorldDeps, snap: Snapshot): void {
+export async function restoreSnapshot(deps: WorldDeps, snap: Snapshot): Promise<void> {
   if (!snap || snap.version !== SNAPSHOT_VERSION) {
     throw new Error(`Unsupported snapshot version: ${snap?.version}.`);
   }
@@ -70,14 +70,14 @@ export function restoreSnapshot(deps: WorldDeps, snap: Snapshot): void {
   if (problems.length > 0) {
     throw new Error(`Invalid snapshot state: missing ${problems.join(', ')}.`);
   }
-  const previous = createSnapshot(deps);
+  const previous = await createSnapshot(deps);
   try {
-    deps.identity.importUsers(snap.state.identity);
-    deps.listings.store.importState(snap.state.listings);
-    deps.exchanges.store.importState(snap.state.exchanges);
-    deps.reputation.store.importState(snap.state.reputation);
-    deps.moderation.store.importState(snap.state.moderation);
-    deps.notify.importState(snap.state.notifications);
+    await deps.identity.importUsers(snap.state.identity);
+    await deps.listings.store.importState(snap.state.listings);
+    await deps.exchanges.store.importState(snap.state.exchanges);
+    await deps.reputation.store.importState(snap.state.reputation);
+    await deps.moderation.store.importState(snap.state.moderation);
+    await deps.notify.importState(snap.state.notifications);
   } catch (error) {
     try {
       deps.identity.importUsers(previous.state.identity);

@@ -1,6 +1,11 @@
 import { RELATED } from '../policy/taxonomy.js';
-import type { ListingsStore } from './store.js';
 import type { Listing } from './types.js';
+
+/** Minimal read seam for discovery — satisfied by in-memory and MySQL stores. */
+export interface ListingsReader {
+  all(): Promise<Listing[]>;
+  get(id: string): Promise<Listing | undefined>;
+}
 
 export interface SearchQuery {
   text?: string;
@@ -8,6 +13,7 @@ export interface SearchQuery {
   kind?: 'skill' | 'item';
   category?: string;
   zone?: string;
+  availability?: string;
 }
 
 export type Viewer = { userId: string } | { anonymous: true };
@@ -34,21 +40,23 @@ function isAnon(viewer: Viewer): viewer is { anonymous: true } {
  * Public browse/search (FR-D-1..3). Only Active listings are discoverable.
  * Filters are additive; ranking is recency + category match only (no recommender).
  */
-export function searchListings(
-  store: ListingsStore,
+export async function searchListings(
+  store: ListingsReader,
   query: SearchQuery,
   _viewer: Viewer,
-): { items: Listing[]; total: number } {
+): Promise<{ items: Listing[]; total: number }> {
   const text = query.text?.trim().toLowerCase();
   const zone = query.zone?.trim().toLowerCase();
+  const availability = query.availability?.trim().toLowerCase();
 
-  const items = store
-    .all()
+  const items = (await store
+    .all())
     .filter((l) => l.status === 'Active')
     .filter((l) => (!query.side ? true : l.side === query.side))
     .filter((l) => (!query.kind ? true : l.kind === query.kind))
     .filter((l) => (!query.category ? true : l.category === query.category))
     .filter((l) => (!zone ? true : l.zone.toLowerCase().includes(zone)))
+    .filter((l) => (!availability ? true : (l.availability ?? '').toLowerCase().includes(availability)))
     .filter((l) =>
       !text
         ? true
@@ -68,13 +76,13 @@ export function searchListings(
 }
 
 /** Detail view (FR-D-2): full terms + compatible hints + login CTA for visitors. */
-export function getDetail(
-  store: ListingsStore,
+export async function getDetail(
+  store: ListingsReader,
   id: string,
   viewer: Viewer,
   ownerRating?: OwnerRating,
-): DetailResult | undefined {
-  const listing = store.get(id);
+): Promise<DetailResult | undefined> {
+  const listing = await store.get(id);
   if (!listing) return undefined;
   // Only Active listings are publicly discoverable; owners may preview their own.
   if (listing.status !== 'Active' && (isAnon(viewer) || viewer.userId !== listing.ownerId)) {
@@ -82,8 +90,8 @@ export function getDetail(
   }
 
   const related = new Set<string>([listing.category, ...(RELATED[listing.category] ?? [])]);
-  const compatible = store
-    .all()
+  const compatible = (await store
+    .all())
     .filter(
       (l) =>
         l.id !== listing.id &&

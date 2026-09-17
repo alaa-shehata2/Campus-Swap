@@ -51,6 +51,22 @@ npm test        # domain seam + journey tests (node:test via tsx)
 npm run typecheck
 ```
 
+## Run the web app locally (U1: browse/auth/publish)
+
+Requires Docker (self-hosted MySQL for the pilot).
+
+```bash
+docker compose up -d mysql
+npm run seed --prefix web   # demo members (maya@kfs.edu.eg, jonas@gmail.com / password1) + listings
+npm run dev --prefix web    # http://localhost:3000
+```
+
+`web/.env.local` holds `MYSQL_URL` (gitignored; see `web/.env.example`).
+U1 verified end-to-end in headless Chromium: logged-out browse + search +
+login-gated actions (SC-2), signup → first published listing (SC-1),
+duplicate-email field error, profile without email leak. Disclaimer + Terms
+link on signup and listing create; all datetimes labeled Cairo time.
+
 ## Layout
 
 ```text

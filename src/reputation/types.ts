@@ -31,5 +31,5 @@ export interface Aggregate {
 
 /** Minimal seam the reputation module consumes (owned by exchanges). */
 export interface ExchangesPort {
-  readExchange(id: string): Exchange | undefined;
+  readExchange(id: string): Promise<Exchange | undefined>;
 }

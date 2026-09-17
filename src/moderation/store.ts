@@ -10,70 +10,70 @@ export class ModerationStore {
   /** Report ids currently Under review (= open cases for purpose-bound reads, P-4). */
   private openCases = new Set<string>();
 
-  insertReport(r: Omit<Report, 'id'>): Report {
+  async insertReport(r: Omit<Report, 'id'>): Promise<Report> {
     const full: Report = { ...r, id: randomUUID() };
     this.reports.set(full.id, full);
     return structuredClone(full);
   }
 
-  getReport(id: string): Report | undefined {
+  async getReport(id: string): Promise<Report | undefined> {
     const r = this.reports.get(id);
     return r ? structuredClone(r) : undefined;
   }
 
   /** All reports for metrics (triage latency) and audits. */
-  allReports(): Report[] {
+  async allReports(): Promise<Report[]> {
     return [...this.reports.values()].map((r) => structuredClone(r));
   }
 
-  saveReport(r: Report): void {
+  async saveReport(r: Report): Promise<void> {
     this.reports.set(r.id, structuredClone(r));
   }
 
-  addSanction(s: Omit<Sanction, 'id'>): Sanction {
+  async addSanction(s: Omit<Sanction, 'id'>): Promise<Sanction> {
     const full: Sanction = { ...s, id: randomUUID() };
     this.sanctions.push(full);
     return { ...full };
   }
 
-  addVoid(v: Omit<ReviewVoid, 'id'>): ReviewVoid {
+  async addVoid(v: Omit<ReviewVoid, 'id'>): Promise<ReviewVoid> {
     const full: ReviewVoid = { ...v, id: randomUUID() };
     this.voids.push(full);
     return { ...full };
   }
 
-  addHandover(h: Omit<Handover, 'id'>): Handover {
+  async addHandover(h: Omit<Handover, 'id'>): Promise<Handover> {
     const full: Handover = { ...h, id: randomUUID() };
     this.handovers.push(full);
     return structuredClone(full);
   }
 
-  getSanctions(): Sanction[] {
+  async getSanctions(): Promise<Sanction[]> {
     return this.sanctions.map((s) => ({ ...s }));
   }
 
-  getVoids(): ReviewVoid[] {
+  async getVoids(): Promise<ReviewVoid[]> {
     return this.voids.map((v) => ({ ...v }));
   }
 
-  getHandovers(): Handover[] {
+  async getHandovers(): Promise<Handover[]> {
     return this.handovers.map((h) => structuredClone(h));
   }
 
-  openCase(reportId: string): void {
+  async openCase(reportId: string): Promise<void> {
     this.openCases.add(reportId);
   }
 
-  closeCase(reportId: string): void {
+  async closeCase(reportId: string): Promise<void> {
     this.openCases.delete(reportId);
   }
 
-  hasOpenCase(): boolean {
+  async hasOpenCase(): Promise<boolean> {
     return this.openCases.size > 0;
   }
 
   /** Open (Under review) reports — for purpose-scoped case checks (P-4). */
-  openReports(): Report[] {
+  async openReports(): Promise<Report[]> {
     const out: Report[] = [];
     for (const r of this.reports.values()) {
       if (r.status === 'Under review') out.push(structuredClone(r));
@@ -81,29 +81,29 @@ export class ModerationStore {
     return out;
   }
 
-  exportState(): {
+  async exportState(): Promise<{
     reports: Report[];
     sanctions: Sanction[];
     voids: ReviewVoid[];
     handovers: Handover[];
     openCases: string[];
-  } {
+  }> {
     return {
       reports: [...this.reports.values()].map((r) => structuredClone(r)),
-      sanctions: this.getSanctions(),
-      voids: this.getVoids(),
-      handovers: this.getHandovers(),
+      sanctions: await this.getSanctions(),
+      voids: await this.getVoids(),
+      handovers: await this.getHandovers(),
       openCases: [...this.openCases],
     };
   }
 
-  importState(state: {
+  async importState(state: {
     reports: Report[];
     sanctions: Sanction[];
     voids: ReviewVoid[];
     handovers: Handover[];
     openCases: string[];
-  }): void {
+  }): Promise<void> {
     if (!state || !Array.isArray(state.reports)) throw new Error('Invalid moderation snapshot.');
     this.reports.clear();
     this.sanctions = [];

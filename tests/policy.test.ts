@@ -5,12 +5,12 @@ import { CATEGORIES } from '../src/policy/taxonomy.js';
 import { disclaimerFor } from '../src/policy/disclaimers.js';
 
 describe('policy', () => {
-  it('exposes a fixed category taxonomy', () => {
+  it('exposes a fixed category taxonomy', async () => {
     assert.ok(CATEGORIES.includes('tutoring'));
     assert.ok(CATEGORIES.includes('textbooks'));
   });
 
-  it('blocks each prohibited class fixture', () => {
+  it('blocks each prohibited class fixture', async () => {
     const fixtures = [
       'buy my viagra prescription medicine',
       'lawyer legal representation for court',
@@ -25,14 +25,14 @@ describe('policy', () => {
     }
   });
 
-  it('allows a benign tutoring offer', () => {
+  it('allows a benign tutoring offer', async () => {
     assert.equal(
       isProhibited('Python tutoring', 'I teach Python basics on campus').blocked,
       false,
     );
   });
 
-  it('provides disclaimers for all 5 flows', () => {
+  it('provides disclaimers for all 5 flows', async () => {
     for (const f of [
       'signup',
       'listing-create',

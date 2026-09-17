@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { createListingsService } from '../src/listings/service.js';
 import { searchListings, getDetail } from '../src/listings/search.js';
 
-function seed() {
+async function seed() {
   const svc = createListingsService();
-  const a = svc.publish('u1', {
+  const a = await svc.publish('u1', {
     side: 'offer',
     kind: 'skill',
     title: 'Python tutoring',
@@ -14,7 +14,7 @@ function seed() {
     zone: 'North campus',
     images: [],
   });
-  const b = svc.publish('u2', {
+  const b = await svc.publish('u2', {
     side: 'request',
     kind: 'skill',
     title: 'Need Python help',
@@ -23,7 +23,7 @@ function seed() {
     zone: 'North campus',
     images: [],
   });
-  const c = svc.publish('u3', {
+  const c = await svc.publish('u3', {
     side: 'offer',
     kind: 'item',
     title: 'Lend my drill',
@@ -34,7 +34,7 @@ function seed() {
     modality: 'lend',
     returnTerm: 'Return within 7 days.',
   });
-  const d = svc.publish('u4', {
+  const d = await svc.publish('u4', {
     side: 'offer',
     kind: 'skill',
     title: 'Draft lesson',
@@ -51,16 +51,16 @@ function seed() {
 const ANON = { anonymous: true } as const;
 
 describe('discovery', () => {
-  it('logged-out search works; paused/draft absent', () => {
-    const svc = seed();
-    const res = searchListings(svc.store, {}, ANON);
+  it('logged-out search works; paused/draft absent', async () => {
+    const svc = await seed();
+    const res = await searchListings(svc.store, {}, ANON);
     assert.equal(res.total, 3);
     assert.ok(res.items.every((l) => l.status === 'Active'));
   });
 
-  it('combined filters narrow results', () => {
-    const svc = seed();
-    const res = searchListings(
+  it('combined filters narrow results', async () => {
+    const svc = await seed();
+    const res = await searchListings(
       svc.store,
       { side: 'offer', kind: 'skill', category: 'tutoring', zone: 'North' },
       ANON,
@@ -69,17 +69,17 @@ describe('discovery', () => {
     assert.equal(res.items[0]?.title, 'Python tutoring');
   });
 
-  it('keyword search matches title/description', () => {
-    const svc = seed();
-    const res = searchListings(svc.store, { text: 'drill' }, ANON);
+  it('keyword search matches title/description', async () => {
+    const svc = await seed();
+    const res = await searchListings(svc.store, { text: 'drill' }, ANON);
     assert.equal(res.total, 1);
     assert.equal(res.items[0]?.title, 'Lend my drill');
   });
 
-  it('detail for visitors shows login CTA; compatible = opposite side + related category', () => {
-    const svc = seed();
-    const target = searchListings(svc.store, { text: 'Python tutoring' }, ANON).items[0]!;
-    const detail = getDetail(svc.store, target.id, ANON);
+  it('detail for visitors shows login CTA; compatible = opposite side + related category', async () => {
+    const svc = await seed();
+    const target = (await searchListings(svc.store, { text: 'Python tutoring' }, ANON)).items[0]!;
+    const detail = await getDetail(svc.store, target.id, ANON);
     assert.ok(detail);
     assert.equal(detail!.loginCTA, true);
     assert.ok(detail!.compatible.length >= 1);
@@ -92,17 +92,17 @@ describe('discovery', () => {
     assert.ok(detail!.compatible.every((l) => l.side === 'request'));
   });
 
-  it('member detail has no login CTA', () => {
-    const svc = seed();
-    const target = searchListings(svc.store, { text: 'drill' }, ANON).items[0]!;
-    const detail = getDetail(svc.store, target.id, { userId: 'u9' });
+  it('member detail has no login CTA', async () => {
+    const svc = await seed();
+    const target = (await searchListings(svc.store, { text: 'drill' }, ANON)).items[0]!;
+    const detail = await getDetail(svc.store, target.id, { userId: 'u9' });
     assert.ok(detail);
     assert.equal(detail!.loginCTA, false);
   });
 
-  it('non-Active detail is hidden from visitors and non-owners', () => {
+  it('non-Active detail is hidden from visitors and non-owners', async () => {
     const svc = createListingsService();
-    const draft = svc.publish('u1', {
+    const draft = await svc.publish('u1', {
       side: 'offer',
       kind: 'skill',
       title: 'Hidden draft',
@@ -114,8 +114,8 @@ describe('discovery', () => {
     });
     assert.equal(draft.ok, true);
     if (!draft.ok) return;
-    assert.equal(getDetail(svc.store, draft.value.id, ANON), undefined);
-    assert.equal(getDetail(svc.store, draft.value.id, { userId: 'u2' }), undefined);
-    assert.ok(getDetail(svc.store, draft.value.id, { userId: 'u1' }));
+    assert.equal(await getDetail(svc.store, draft.value.id, ANON), undefined);
+    assert.equal(await getDetail(svc.store, draft.value.id, { userId: 'u2' }), undefined);
+    assert.ok(await getDetail(svc.store, draft.value.id, { userId: 'u1' }));
   });
 });

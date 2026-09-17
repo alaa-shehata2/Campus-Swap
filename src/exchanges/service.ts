@@ -37,16 +37,16 @@ export function createExchangesService(
   }
 
   /** Max open (Proposed) proposals per listing — the ProposalCap (D7 rev.1). */
-  function openCount(listingId: string): number {
-    return store.openProposalsForListing(listingId).length;
+  async function openCount(listingId: string): Promise<number> {
+    return (await store.openProposalsForListing(listingId)).length;
   }
 
-  function lockStatus(listingId: string): LockStatus {
-    const count = openCount(listingId);
+  async function lockStatus(listingId: string): Promise<LockStatus> {
+    const count = await openCount(listingId);
     return { openCount: count, locked: count >= MAX_OPEN_PROPOSALS };
   }
 
-  function propose(proposerId: string, input: ProposeInput): Result<Proposal> {
+  async function propose(proposerId: string, input: ProposeInput): Promise<Result<Proposal>> {
     const sideA = [...new Set(input.sideAListingIds)];
     const sideB = [...new Set(input.sideBListingIds)];
 
@@ -62,12 +62,12 @@ export function createExchangesService(
     if (!input.terms?.trim()) {
       return fail([{ code: 'required', field: 'terms', message: 'Free-text terms are required.' }]);
     }
-    if (!deps.identity.getProfile(proposerId)) {
+    if (!(await deps.identity.getProfile(proposerId))) {
       return fail([{ code: 'not-found', message: 'Proposer not found.' }]);
     }
 
     for (const id of sideA) {
-      const l = deps.listings.get(id);
+      const l = await deps.listings.get(id);
       if (!l) return fail([{ code: 'not-found', message: `Listing not found: ${id}.` }]);
       if (l.status !== 'Active') {
         return fail([
@@ -83,7 +83,7 @@ export function createExchangesService(
 
     let counterparty: string | undefined;
     for (const id of sideB) {
-      const l = deps.listings.get(id);
+      const l = await deps.listings.get(id);
       if (!l) return fail([{ code: 'not-found', message: `Listing not found: ${id}.` }]);
       if (l.status !== 'Active') {
         return fail([
@@ -107,14 +107,14 @@ export function createExchangesService(
     }
     const counterpartyId = counterparty!;
 
-    if (deps.identity.isBlockedOrMuted(proposerId, counterpartyId)) {
+    if (await deps.identity.isBlockedOrMuted(proposerId, counterpartyId)) {
       return fail([
         { code: 'blocked', message: 'You cannot propose to this user (block/mute in effect).' },
       ]);
     }
 
     for (const id of [...sideA, ...sideB]) {
-      if (openCount(id) >= MAX_OPEN_PROPOSALS) {
+      if ((await openCount(id)) >= MAX_OPEN_PROPOSALS) {
         return fail([
           {
             code: 'proposal-cap-reached',
@@ -126,7 +126,7 @@ export function createExchangesService(
       }
     }
 
-    const proposal = store.insertProposal({
+    const proposal = await store.insertProposal({
       proposerId,
       counterpartyId,
       sideAListingIds: sideA,
@@ -144,19 +144,19 @@ export function createExchangesService(
   }
 
   /** Participant-gated proposal read: negotiation terms stay between the two sides. */
-  function getProposal(viewerId: string, id: string): Proposal | undefined {
-    const p = store.getProposal(id);
+  async function getProposal(viewerId: string, id: string): Promise<Proposal | undefined> {
+    const p = await store.getProposal(id);
     if (!p || !isParticipant(p, viewerId)) return undefined;
     return p;
   }
 
   /** Counterparty responds. Decline ends the proposal; accept creates the exchange (auto-pause + holds). */
-  function respond(
+  async function respond(
     userId: string,
     id: string,
     decision: 'accept' | 'decline',
-  ): Result<Proposal | { proposal: Proposal; exchange: Exchange }> {
-    const p = store.getProposal(id);
+  ): Promise<Result<Proposal | { proposal: Proposal; exchange: Exchange }>> {
+    const p = await store.getProposal(id);
     if (!p) return fail([{ code: 'not-found', message: 'Proposal not found.' }]);
     if (p.status !== 'Proposed') {
       return fail([
@@ -171,7 +171,7 @@ export function createExchangesService(
     if (decision === 'decline') {
       p.status = 'Declined';
       p.decidedAtMs = now();
-      store.saveProposal(p);
+      await store.saveProposal(p);
       deps.notify?.emit(p.proposerId, 'proposal-declined', p.id);
       return ok(p);
     }
@@ -182,10 +182,10 @@ export function createExchangesService(
    * Accept: first acceptance auto-pauses referenced listings (D7 rev.1) and
    * freezes terms. Remaining pendings go read-only until reopen/decline.
    */
-  function accept(p: Proposal): Result<{ proposal: Proposal; exchange: Exchange }> {
+  async function accept(p: Proposal): Promise<Result<{ proposal: Proposal; exchange: Exchange }>> {
     const listingIds = [...p.sideAListingIds, ...p.sideBListingIds];
     for (const lid of listingIds) {
-      if (isHeld(lid)) {
+      if (await isHeld(lid)) {
         return fail([
           {
             code: 'listing-paused',
@@ -195,7 +195,7 @@ export function createExchangesService(
           },
         ]);
       }
-      const l = deps.listings.get(lid);
+      const l = await deps.listings.get(lid);
       if (!l || l.status !== 'Active') {
         return fail([
           { code: 'listing-not-active', message: 'All referenced listings must be Active to accept.' },
@@ -203,7 +203,7 @@ export function createExchangesService(
       }
     }
 
-    const exchange = store.insertExchange({
+    const exchange = await store.insertExchange({
       proposalId: p.id,
       participantA: p.proposerId,
       participantB: p.counterpartyId,
@@ -214,13 +214,13 @@ export function createExchangesService(
       createdAtMs: now(),
     });
     for (const lid of listingIds) {
-      deps.listings.systemPause(lid);
-      store.hold(lid, exchange.id);
+      await deps.listings.systemPause(lid);
+      await store.hold(lid, exchange.id);
     }
     p.status = 'Accepted';
     p.decidedAtMs = now();
     p.exchangeId = exchange.id;
-    store.saveProposal(p);
+    await store.saveProposal(p);
     deps.notify?.emit(p.proposerId, 'proposal-accepted', p.id);
     return ok({ proposal: p, exchange });
   }
@@ -229,21 +229,21 @@ export function createExchangesService(
    * True while a listing is held by an unresolved accepted exchange.
    * Lazy release: owner reopen (Active) or exchange resolution clears the hold.
    */
-  function isHeld(listingId: string): boolean {
-    const exchangeId = store.heldBy(listingId);
+  async function isHeld(listingId: string): Promise<boolean> {
+    const exchangeId = await store.heldBy(listingId);
     if (!exchangeId) return false;
-    const exchange = store.getExchange(exchangeId);
-    const listing = deps.listings.get(listingId);
+    const exchange = await store.getExchange(exchangeId);
+    const listing = await deps.listings.get(listingId);
     if (!exchange || exchange.status !== 'Scheduled' || !listing || listing.status !== 'Paused') {
-      store.release(listingId);
+      await store.release(listingId);
       return false;
     }
     return true;
   }
 
   /** Withdrawal allowed any time before acceptance, by either side (FR-E-2). */
-  function withdraw(userId: string, id: string): Result<Proposal> {
-    const p = store.getProposal(id);
+  async function withdraw(userId: string, id: string): Promise<Result<Proposal>> {
+    const p = await store.getProposal(id);
     if (!p) return fail([{ code: 'not-found', message: 'Proposal not found.' }]);
     if (p.status !== 'Proposed') {
       return fail([
@@ -257,29 +257,29 @@ export function createExchangesService(
     }
     p.status = 'Withdrawn';
     p.decidedAtMs = now();
-    store.saveProposal(p);
+    await store.saveProposal(p);
     return ok(p);
   }
 
   /** 7-day expiry job (FR-E-2). Returns expired proposals for the notification sink. */
-  function runExpiry(nowMs: number): Proposal[] {
-    const expired = store.proposedOlderThan(nowMs, PROPOSAL_WINDOW_MS);
+  async function runExpiry(nowMs: number): Promise<Proposal[]> {
+    const expired = await store.proposedOlderThan(nowMs, PROPOSAL_WINDOW_MS);
     for (const p of expired) {
       p.status = 'Expired';
       p.decidedAtMs = nowMs;
-      store.saveProposal(p);
+      await store.saveProposal(p);
       deps.notify?.emit(p.proposerId, 'proposal-expired', p.id);
     }
     return expired;
   }
 
   /** Schedule the meetup (FR-E-5): Cairo-labeled time + place + safety nudge. */
-  function schedule(
+  async function schedule(
     userId: string,
     exchangeId: string,
     input: ScheduleInput,
-  ): Result<{ exchange: Exchange; safetyNudge: string }> {
-    const e = store.getExchange(exchangeId);
+  ): Promise<Result<{ exchange: Exchange; safetyNudge: string }>> {
+    const e = await store.getExchange(exchangeId);
     if (!e) return fail([{ code: 'not-found', message: 'Exchange not found.' }]);
     if (e.status !== 'Scheduled') {
       return fail([
@@ -328,18 +328,18 @@ export function createExchangesService(
     const rescheduled = e.schedule !== undefined;
     e.schedule = { at: formatCairoTime(new Date(atMs).toISOString()), place };
     e.log.push(`scheduled for ${e.schedule.at} at ${place}`);
-    store.saveExchange(e);
+    await store.saveExchange(e);
     deps.notify?.emit(otherOf(e, userId), rescheduled ? 'schedule-changed' : 'schedule-set', e.id);
     return ok({ exchange: e, safetyNudge: SAFETY_NUDGE });
   }
 
   /** Two-step completion, step 1 (FR-E-6). Schedule-less Done needs override + reason. */
-  function markDone(
+  async function markDone(
     userId: string,
     exchangeId: string,
     opts: { overrideReason?: string } = {},
-  ): Result<Exchange> {
-    const e = store.getExchange(exchangeId);
+  ): Promise<Result<Exchange>> {
+    const e = await store.getExchange(exchangeId);
     if (!e) return fail([{ code: 'not-found', message: 'Exchange not found.' }]);
     if (e.status !== 'Scheduled') {
       return fail([
@@ -372,14 +372,14 @@ export function createExchangesService(
         ? `done marked by ${userId} with schedule override: ${opts.overrideReason.trim()}`
         : `done marked by ${userId}`,
     );
-    store.saveExchange(e);
+    await store.saveExchange(e);
     deps.notify?.emit(otherOf(e, userId), 'completion-requested', e.id);
     return ok(e);
   }
 
   /** Step 2a: the OTHER participant confirms within 7 days. */
-  function confirm(userId: string, exchangeId: string): Result<Exchange> {
-    const e = store.getExchange(exchangeId);
+  async function confirm(userId: string, exchangeId: string): Promise<Result<Exchange>> {
+    const e = await store.getExchange(exchangeId);
     if (!e) return fail([{ code: 'not-found', message: 'Exchange not found.' }]);
     if (e.status !== 'Scheduled' || e.doneMarkedBy === undefined || e.doneMarkedAtMs === undefined) {
       return fail([
@@ -403,14 +403,14 @@ export function createExchangesService(
     }
     e.status = 'Completed';
     e.log.push(`confirmed by ${userId}`);
-    store.saveExchange(e);
+    await store.saveExchange(e);
     deps.notify?.emit(otherOf(e, userId), 'completion-confirmed', e.id);
     return ok(e);
   }
 
   /** Step 2b: the OTHER participant disputes within 7 days → Disputed. */
-  function dispute(userId: string, exchangeId: string): Result<Exchange> {
-    const e = store.getExchange(exchangeId);
+  async function dispute(userId: string, exchangeId: string): Promise<Result<Exchange>> {
+    const e = await store.getExchange(exchangeId);
     if (!e) return fail([{ code: 'not-found', message: 'Exchange not found.' }]);
     if (e.status !== 'Scheduled' || e.doneMarkedBy === undefined || e.doneMarkedAtMs === undefined) {
       return fail([
@@ -434,17 +434,17 @@ export function createExchangesService(
     }
     e.status = 'Disputed';
     e.log.push(`disputed by ${userId}`);
-    store.saveExchange(e);
+    await store.saveExchange(e);
     return ok(e);
   }
 
   /** Silence job: Done-marked exchanges auto-complete after 7 days (FR-E-6). */
-  function runAutoComplete(nowMs: number): Exchange[] {
-    const due = store.doneMarkedOlderThan(nowMs, COMPLETION_WINDOW_MS);
+  async function runAutoComplete(nowMs: number): Promise<Exchange[]> {
+    const due = await store.doneMarkedOlderThan(nowMs, COMPLETION_WINDOW_MS);
     for (const e of due) {
       e.status = 'Completed';
       e.log.push('auto-completed after 7-day silence');
-      store.saveExchange(e);
+      await store.saveExchange(e);
       deps.notify?.emit(e.participantA, 'completion-confirmed', e.id);
       deps.notify?.emit(e.participantB, 'completion-confirmed', e.id);
     }
@@ -452,12 +452,12 @@ export function createExchangesService(
   }
 
   /** Cancellation with reason (FR-E-4). Either participant, Scheduled only. */
-  function cancel(
+  async function cancel(
     userId: string,
     exchangeId: string,
     input: { reason: CancelReason; detail?: string },
-  ): Result<Exchange> {
-    const e = store.getExchange(exchangeId);
+  ): Promise<Result<Exchange>> {
+    const e = await store.getExchange(exchangeId);
     if (!e) return fail([{ code: 'not-found', message: 'Exchange not found.' }]);
     if (e.status !== 'Scheduled') {
       return fail([
@@ -482,14 +482,14 @@ export function createExchangesService(
     e.cancelReason = input.reason;
     if (input.detail?.trim()) e.cancelDetail = input.detail.trim();
     e.log.push(`cancelled by ${userId}: ${input.reason}`);
-    store.saveExchange(e);
+    await store.saveExchange(e);
     deps.notify?.emit(otherOf(e, userId), 'cancellation', e.id);
     return ok(e);
   }
 
   /** Participant-gated exchange read: schedule and participants stay between the two sides. */
-  function getExchange(viewerId: string, id: string): Exchange | undefined {
-    const e = store.getExchange(id);
+  async function getExchange(viewerId: string, id: string): Promise<Exchange | undefined> {
+    const e = await store.getExchange(id);
     if (!e || !isParticipantOf(e, viewerId)) return undefined;
     return e;
   }
@@ -498,17 +498,17 @@ export function createExchangesService(
    * INTERNAL accessors for case-gated modules (reputation, moderation).
    * No authz here — callers must enforce their own gates (privacy case access).
    */
-  function readExchange(id: string): Exchange | undefined {
+  async function readExchange(id: string): Promise<Exchange | undefined> {
     return store.getExchange(id);
   }
 
-  function readThread(exchangeId: string): Message[] {
+  async function readThread(exchangeId: string): Promise<Message[]> {
     return store.messagesFor(exchangeId);
   }
 
   /** Participant-only plain-text thread (FR-E-7). No files in MVP. */
-  function postMessage(senderId: string, exchangeId: string, text: string): Result<Message> {
-    const e = store.getExchange(exchangeId);
+  async function postMessage(senderId: string, exchangeId: string, text: string): Promise<Result<Message>> {
+    const e = await store.getExchange(exchangeId);
     if (!e) return fail([{ code: 'not-found', message: 'Exchange not found.' }]);
     if (!isParticipantOf(e, senderId)) {
       return fail([
@@ -516,7 +516,7 @@ export function createExchangesService(
       ]);
     }
     const other = senderId === e.participantA ? e.participantB : e.participantA;
-    if (deps.identity.isBlockedOrMuted(senderId, other)) {
+    if (await deps.identity.isBlockedOrMuted(senderId, other)) {
       return fail([
         { code: 'blocked', message: 'You cannot message this user (block/mute in effect).' },
       ]);
@@ -534,19 +534,19 @@ export function createExchangesService(
         },
       ]);
     }
-    return ok(store.insertMessage({ exchangeId, senderId, text: clean, createdAtMs: now() }));
+    return ok(await store.insertMessage({ exchangeId, senderId, text: clean, createdAtMs: now() }));
   }
 
   /** Participant-only read in the shared Result shape (no silent leaks, no throws). */
-  function getMessages(viewerId: string, exchangeId: string): Result<Message[]> {
-    const e = store.getExchange(exchangeId);
+  async function getMessages(viewerId: string, exchangeId: string): Promise<Result<Message[]>> {
+    const e = await store.getExchange(exchangeId);
     if (!e) return fail([{ code: 'not-found', message: 'Exchange not found.' }]);
     if (!isParticipantOf(e, viewerId)) {
       return fail([
         { code: 'not-participant', message: 'Only exchange participants can read messages.' },
       ]);
     }
-    return ok(store.messagesFor(exchangeId));
+    return ok(await store.messagesFor(exchangeId));
   }
 
   return { propose, getProposal, respond, withdraw, runExpiry, lockStatus, openCount, schedule, markDone, confirm, dispute, runAutoComplete, cancel, getExchange, readExchange, readThread, postMessage, getMessages, store };

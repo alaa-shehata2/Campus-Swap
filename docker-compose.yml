@@ -1,0 +1,25 @@
+# CampusSwap local stack (self-hosted MySQL for the pilot).
+# Web app itself runs via `npm run dev --prefix web` (see README).
+# Credentials below are LOCAL-DEV ONLY.
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: campuswap-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: campuswap-root
+      MYSQL_DATABASE: campuswap
+      MYSQL_USER: campuswap
+      MYSQL_PASSWORD: campuswap
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "campuswap", "-pcampuswap"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  mysql-data:

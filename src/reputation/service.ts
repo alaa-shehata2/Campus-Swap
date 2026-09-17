@@ -13,17 +13,17 @@ export function createReputationService(
 ) {
   const store = opts.store ?? new ReputationStore();
   const now = opts.now ?? Date.now;
-  function authorize(token: unknown): Result<string> {
-    return deps.identity?.authorizeMemberSession(token) ??
+  async function authorize(token: unknown): Promise<Result<string>> {
+    return (await deps.identity?.authorizeMemberSession(token)) ??
       fail([{ code: 'not-configured', message: 'Authenticated reputation mutations are not configured.' }]);
   }
 
-  function submitReview(
+  async function submitReview(
     reviewerId: string,
     exchangeId: string,
     input: SubmitReviewInput,
-  ): Result<Review> {
-    const e = deps.exchanges.readExchange(exchangeId);
+  ): Promise<Result<Review>> {
+    const e = await deps.exchanges.readExchange(exchangeId);
     if (!e || e.status !== 'Completed') {
       return fail([
         { code: 'exchange-not-completed', message: 'Reviews are only allowed on Completed exchanges.' },
@@ -50,13 +50,13 @@ export function createReputationService(
         },
       ]);
     }
-    const existing = store.forExchange(exchangeId).find((r) => r.reviewerId === reviewerId);
+    const existing = (await store.forExchange(exchangeId)).find((r) => r.reviewerId === reviewerId);
     if (existing) {
       return fail([
         { code: 'duplicate-review', message: 'You have already reviewed this exchange.' },
       ]);
     }
-    const review = store.insert({
+    const review = await store.insert({
       exchangeId,
       reviewerId,
       revieweeId: isA ? e.participantB : e.participantA,
@@ -65,23 +65,23 @@ export function createReputationService(
       status: 'Hidden',
       submittedAtMs: now(),
     });
-    maybeReveal(exchangeId, now());
+    await maybeReveal(exchangeId, now());
     return ok(review);
   }
 
   /** Publish when both sides submitted or 14 days passed since the earliest submit. Returns newly published. */
-  function maybeReveal(exchangeId: string, atMs: number): Review[] {
-    const hidden = store.forExchange(exchangeId).filter((r) => r.status === 'Hidden');
+  async function maybeReveal(exchangeId: string, atMs: number): Promise<Review[]> {
+    const hidden = (await store.forExchange(exchangeId)).filter((r) => r.status === 'Hidden');
     if (hidden.length === 0) return [];
-    const submittedCount = store
-      .forExchange(exchangeId)
+    const submittedCount = (await store
+      .forExchange(exchangeId))
       .filter((r) => r.status !== 'Voided').length;
     const earliest = Math.min(...hidden.map((r) => r.submittedAtMs));
     if (submittedCount >= 2 || atMs - earliest >= REVEAL_WINDOW_MS) {
       for (const r of hidden) {
         r.status = 'Published';
         r.publishedAtMs = atMs;
-        store.save(r);
+        await store.save(r);
         deps.notify?.emit(r.revieweeId, 'review-published', r.id);
       }
       return hidden;
@@ -90,24 +90,24 @@ export function createReputationService(
   }
 
   /** Blind read: Hidden reviews visible to their reviewer only; Published to anyone. */
-  function getReview(viewerId: string, id: string): Review | undefined {
-    const r = store.get(id);
+  async function getReview(viewerId: string, id: string): Promise<Review | undefined> {
+    const r = await store.get(id);
     if (!r) return undefined;
     if (r.status === 'Published') return r;
     if (r.status === 'Voided') {
-      const e = deps.exchanges.readExchange(r.exchangeId);
+      const e = await deps.exchanges.readExchange(r.exchangeId);
       if (!e) return undefined;
       return viewerId === e.participantA || viewerId === e.participantB ? r : undefined;
     }
     return r.reviewerId === viewerId ? r : undefined;
   }
 
-  function editReview(
+  async function editReview(
     reviewerId: string,
     id: string,
     patch: Partial<SubmitReviewInput>,
-  ): Result<Review> {
-    const r = store.get(id);
+  ): Promise<Result<Review>> {
+    const r = await store.get(id);
     if (!r || r.reviewerId !== reviewerId) {
       return fail([{ code: 'not-found', message: 'Review not found.' }]);
     }
@@ -140,13 +140,13 @@ export function createReputationService(
       r.text = patch.text;
     }
     r.editedAtMs = now();
-    store.save(r);
+    await store.save(r);
     return ok(r);
   }
 
   /** Aggregate reputation: average + count + distribution + full history (FR-R-3). */
-  function aggregate(userId: string): Aggregate {
-    const history = store.publishedFor(userId);
+  async function aggregate(userId: string): Promise<Aggregate> {
+    const history = await store.publishedFor(userId);
     const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     let sum = 0;
     for (const r of history) {
@@ -162,12 +162,12 @@ export function createReputationService(
   }
 
   /** One response per review by the reviewed party (FR-R-5). */
-  function respondToReview(
+  async function respondToReview(
     revieweeId: string,
     id: string,
     input: RespondInput,
-  ): Result<Review> {
-    const r = store.get(id);
+  ): Promise<Result<Review>> {
+    const r = await store.get(id);
     if (!r || r.revieweeId !== revieweeId) {
       return fail([{ code: 'not-found', message: 'Review not found.' }]);
     }
@@ -195,13 +195,13 @@ export function createReputationService(
       ]);
     }
     r.response = { text, submittedAtMs: now() };
-    store.save(r);
+    await store.save(r);
     deps.notify?.emit(r.reviewerId, 'review-response', r.id);
     return ok(r);
   }
 
-  function editResponse(revieweeId: string, id: string, input: RespondInput): Result<Review> {
-    const r = store.get(id);
+  async function editResponse(revieweeId: string, id: string, input: RespondInput): Promise<Result<Review>> {
+    const r = await store.get(id);
     if (!r || r.revieweeId !== revieweeId || !r.response) {
       return fail([{ code: 'not-found', message: 'Response not found.' }]);
     }
@@ -224,7 +224,7 @@ export function createReputationService(
       ]);
     }
     r.response = { ...r.response, text, editedAtMs: now() };
-    store.save(r);
+    await store.save(r);
     return ok(r);
   }
 
@@ -234,42 +234,42 @@ export function createReputationService(
    * review besides the 48h edit window — voids are recorded with actor +
    * reason + timestamp, never silent (S-5).
    */
-  function voidReview(by: string, id: string, reason: string): Result<Review> {
-    const r = store.get(id);
+  async function voidReview(by: string, id: string, reason: string): Promise<Result<Review>> {
+    const r = await store.get(id);
     if (!r) return fail([{ code: 'not-found', message: 'Review not found.' }]);
     if (!reason?.trim()) {
       return fail([{ code: 'required', field: 'reason', message: 'A void reason is required.' }]);
     }
     r.status = 'Voided';
     r.void = { by, reason: reason.trim(), atMs: now() };
-    store.save(r);
+    await store.save(r);
     deps.notify?.emit(r.revieweeId, 'moderation-action', r.id);
     return ok(r);
   }
 
   /** Time-based reveal job. Returns newly published reviews for the notification sink. */
-  function revealDue(nowMs: number): Review[] {
+  async function revealDue(nowMs: number): Promise<Review[]> {
     const published: Review[] = [];
-    for (const exchangeId of store.exchangeIds()) {
-      published.push(...maybeReveal(exchangeId, nowMs));
+    for (const exchangeId of await store.exchangeIds()) {
+      published.push(...(await maybeReveal(exchangeId, nowMs)));
     }
     return published;
   }
 
-  function submitReviewForSession(token: unknown, exchangeId: string, input: SubmitReviewInput): Result<Review> {
-    const auth = authorize(token);
+  async function submitReviewForSession(token: unknown, exchangeId: string, input: SubmitReviewInput): Promise<Result<Review>> {
+    const auth = await authorize(token);
     return auth.ok ? submitReview(auth.value, exchangeId, input) : auth;
   }
-  function editReviewForSession(token: unknown, id: string, patch: Partial<SubmitReviewInput>): Result<Review> {
-    const auth = authorize(token);
+  async function editReviewForSession(token: unknown, id: string, patch: Partial<SubmitReviewInput>): Promise<Result<Review>> {
+    const auth = await authorize(token);
     return auth.ok ? editReview(auth.value, id, patch) : auth;
   }
-  function respondToReviewForSession(token: unknown, id: string, input: RespondInput): Result<Review> {
-    const auth = authorize(token);
+  async function respondToReviewForSession(token: unknown, id: string, input: RespondInput): Promise<Result<Review>> {
+    const auth = await authorize(token);
     return auth.ok ? respondToReview(auth.value, id, input) : auth;
   }
-  function editResponseForSession(token: unknown, id: string, input: RespondInput): Result<Review> {
-    const auth = authorize(token);
+  async function editResponseForSession(token: unknown, id: string, input: RespondInput): Promise<Result<Review>> {
+    const auth = await authorize(token);
     return auth.ok ? editResponse(auth.value, id, input) : auth;
   }
 

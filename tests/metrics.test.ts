@@ -5,8 +5,8 @@ import { createReputationService } from '../src/reputation/service.js';
 import { createModerationService } from '../src/moderation/service.js';
 import { setupCompletedExchange, DAY_MS } from './helpers.js';
 
-function populatedWorld() {
-  const ctx = setupCompletedExchange();
+async function populatedWorld() {
+  const ctx = await setupCompletedExchange();
   let now = ctx.now();
   const tick = (t: number) => { now = t; ctx.setNow(t); };
   const reputation = createReputationService({ exchanges: ctx.exchanges }, { now: () => now });
@@ -14,43 +14,43 @@ function populatedWorld() {
     { listings: ctx.listings, identity: ctx.identity, reputation },
     { now: () => now },
   );
-  const mod = ctx.identity.register({
+  const mod = await ctx.identity.register({
     email: 'mod@gmail.com', password: 'password1', displayName: 'Mod',
     campus: 'KFS University', ageConfirmed18: true, rulesAccepted: true,
   });
   assert.equal(mod.ok, true);
   if (!mod.ok) throw new Error('setup failed');
-  ctx.identity.setRole('bootstrap', mod.value.id, 'moderator');
+  await ctx.identity.setRole('bootstrap', mod.value.id, 'moderator');
 
   // one resolved report with a 50h triage latency
-  const report = moderation.report(ctx.aid, {
+  const report = await moderation.report(ctx.aid, {
     targetType: 'user', targetId: ctx.bid,
     reasonCode: 'harassment', description: 'Threatening language in messages, see evidence.',
     images: [],
   });
   assert.equal(report.ok, true);
   if (!report.ok) throw new Error('setup failed');
-  assert.equal(moderation.triage(report.value.id, mod.value.id, 'acknowledge').ok, true);
+  assert.equal((await moderation.triage(report.value.id, mod.value.id, 'acknowledge')).ok, true);
   tick(now + 50 * 60 * 60 * 1000);
-  assert.equal(moderation.triage(report.value.id, mod.value.id, 'resolve').ok, true);
+  assert.equal((await moderation.triage(report.value.id, mod.value.id, 'resolve')).ok, true);
   assert.equal(
-    moderation.sanction(mod.value.id, {
+    (await moderation.sanction(mod.value.id, {
       action: 'warn', targetType: 'user', targetId: ctx.bid, reason: 'Confirmed harassment.',
-    }).ok,
+    })).ok,
     true,
   );
 
   // both reviews submitted → published
-  assert.equal(reputation.submitReview(ctx.aid, ctx.exchangeId, { score: 5 }).ok, true);
-  assert.equal(reputation.submitReview(ctx.bid, ctx.exchangeId, { score: 4 }).ok, true);
+  assert.equal((await reputation.submitReview(ctx.aid, ctx.exchangeId, { score: 5 })).ok, true);
+  assert.equal((await reputation.submitReview(ctx.bid, ctx.exchangeId, { score: 4 })).ok, true);
 
   return { ctx, moderation, reputation, mod: mod.value.id };
 }
 
 describe('metrics', () => {
-  it('counts members, listings, completions, reports, sanctions, reviews', () => {
-    const { ctx, moderation, reputation } = populatedWorld();
-    const m = computePilotMetrics({
+  it('counts members, listings, completions, reports, sanctions, reviews', async () => {
+    const { ctx, moderation, reputation } = await populatedWorld();
+    const m = await computePilotMetrics({
       identity: ctx.identity,
       listings: ctx.listings,
       exchanges: ctx.exchanges,
@@ -73,9 +73,9 @@ describe('metrics', () => {
     assert.equal(m.reviewsPublished, 2);
   });
 
-  it('pilot progress reports unmet targets with remaining counts', () => {
-    const { ctx, moderation, reputation } = populatedWorld();
-    const m = computePilotMetrics({
+  it('pilot progress reports unmet targets with remaining counts', async () => {
+    const { ctx, moderation, reputation } = await populatedWorld();
+    const m = await computePilotMetrics({
       identity: ctx.identity,
       listings: ctx.listings,
       exchanges: ctx.exchanges,
@@ -90,7 +90,7 @@ describe('metrics', () => {
     assert.equal(p.triage.remaining, 2 * 60 * 60 * 1000);
   });
 
-  it('pilot progress passes when D12 targets are met', () => {
+  it('pilot progress passes when D12 targets are met', async () => {
     const p = pilotProgress({
       members: 200, activeMembers: 200, moderators: 2,
       listings: 150, activeListings: 150, publishedListings: 150, completedExchanges: 30,
@@ -102,7 +102,7 @@ describe('metrics', () => {
     assert.equal(p.members.met && p.listings.met && p.completions.met && p.triage.met, true);
   });
 
-  it('D12 targets match the decided pilot goals', () => {
+  it('D12 targets match the decided pilot goals', async () => {
     assert.equal(D12_TARGETS.members, 200);
     assert.equal(D12_TARGETS.listings, 150);
     assert.equal(D12_TARGETS.completions, 30);

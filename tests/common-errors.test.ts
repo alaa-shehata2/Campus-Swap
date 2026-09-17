@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { ok, fail } from '../src/common/errors.js';
 
 describe('errors', () => {
-  it('ok wraps a value', () => {
+  it('ok wraps a value', async () => {
     const r = ok(1);
     assert.equal(r.ok, true);
   });
 
-  it('fail carries field errors', () => {
+  it('fail carries field errors', async () => {
     const r = fail<number>([
       { code: 'required', field: 'email', message: 'Email is required.' },
     ]);

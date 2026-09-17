@@ -13,22 +13,22 @@ function clone(r: Review): Review {
 export class ReputationStore {
   private items = new Map<string, Review>();
 
-  insert(r: Omit<Review, 'id'>): Review {
+  async insert(r: Omit<Review, 'id'>): Promise<Review> {
     const full: Review = { ...r, id: randomUUID() };
     this.items.set(full.id, full);
     return clone(full);
   }
 
-  get(id: string): Review | undefined {
+  async get(id: string): Promise<Review | undefined> {
     const r = this.items.get(id);
     return r ? clone(r) : undefined;
   }
 
-  save(r: Review): void {
+  async save(r: Review): Promise<void> {
     this.items.set(r.id, clone(r));
   }
 
-  forExchange(exchangeId: string): Review[] {
+  async forExchange(exchangeId: string): Promise<Review[]> {
     const out: Review[] = [];
     for (const r of this.items.values()) {
       if (r.exchangeId === exchangeId) out.push(clone(r));
@@ -36,7 +36,7 @@ export class ReputationStore {
     return out;
   }
 
-  publishedFor(revieweeId: string): Review[] {
+  async publishedFor(revieweeId: string): Promise<Review[]> {
     const out: Review[] = [];
     for (const r of this.items.values()) {
       if (r.revieweeId === revieweeId && r.status === 'Published') out.push(clone(r));
@@ -45,7 +45,7 @@ export class ReputationStore {
   }
 
   /** Review counts for pilot metrics (NFR-O-1). */
-  counts(): { total: number; published: number } {
+  async counts(): Promise<{ total: number; published: number }> {
     let total = 0;
     let published = 0;
     for (const r of this.items.values()) {
@@ -55,7 +55,7 @@ export class ReputationStore {
     return { total, published };
   }
 
-  exchangeIds(): string[] {
+  async exchangeIds(): Promise<string[]> {
     const ids = new Set<string>();
     for (const r of this.items.values()) ids.add(r.exchangeId);
     return [...ids];

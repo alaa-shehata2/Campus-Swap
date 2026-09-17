@@ -1,4 +1,5 @@
-import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { hashPassword, newSalt, verifyPasswordHash } from './crypto.js';
 import type { Restriction, Role, UserPublic } from './types.js';
 
 export interface StoredUser extends UserPublic {
@@ -8,8 +9,49 @@ export interface StoredUser extends UserPublic {
   deactivated: boolean;
 }
 
-function hashPassword(password: string, salt: string): string {
-  return scryptSync(password, salt, 64).toString('hex');
+export interface CreateUserInput {
+  email: string;
+  password: string;
+  displayName: string;
+  campus: string;
+  role?: Role;
+}
+
+export interface UserStats {
+  total: number;
+  active: number;
+  deactivated: number;
+  suspended: number;
+  banned: number;
+  moderators: number;
+}
+
+export interface IdentityExport {
+  users: StoredUser[];
+  blocked: string[];
+  muted: string[];
+}
+
+/** Store port — satisfied by the in-memory store and the MySQL store. */
+export interface IdentityStorePort {
+  create(data: CreateUserInput): Promise<StoredUser>;
+  findByEmail(email: string): Promise<StoredUser | undefined>;
+  findById(id: string): Promise<StoredUser | undefined>;
+  hasModerator(): Promise<boolean>;
+  stats(): Promise<UserStats>;
+  verifyPassword(user: StoredUser, password: string): boolean;
+  save(user: StoredUser): Promise<void>;
+  exportState(): Promise<IdentityExport>;
+  importState(state: IdentityExport): Promise<void>;
+  addBlock(a: string, b: string): Promise<void>;
+  removeBlock(a: string, b: string): Promise<void>;
+  addMute(a: string, b: string): Promise<void>;
+  removeMute(a: string, b: string): Promise<void>;
+  isBlockedOrMuted(a: string, b: string): Promise<boolean>;
+  saveSession(token: string, userId: string): Promise<void>;
+  findSession(token: string): Promise<string | undefined>;
+  deleteSession(token: string): Promise<void>;
+  deleteSessionsByUser(userId: string): Promise<void>;
 }
 
 /** In-memory user store. Repository seam: swap for MySQL (ADR-0002) without touching the service. */
@@ -19,15 +61,11 @@ export class IdentityStore {
   /** `${a}:${b}` means a blocked-or-muted b (FR-M-6). */
   private blocked = new Set<string>();
   private muted = new Set<string>();
+  /** Server-side sessions (token → userId). Persisted by SQL stores. */
+  private sessions = new Map<string, string>();
 
-  create(data: {
-    email: string;
-    password: string;
-    displayName: string;
-    campus: string;
-    role?: Role;
-  }): StoredUser {
-    const salt = randomUUID().replace(/-/g, '');
+  async create(data: CreateUserInput): Promise<StoredUser> {
+    const salt = newSalt();
     const user: StoredUser = {
       id: randomUUID(),
       email: data.email.toLowerCase(),
@@ -47,18 +85,18 @@ export class IdentityStore {
     return user;
   }
 
-  findByEmail(email: string): StoredUser | undefined {
+  async findByEmail(email: string): Promise<StoredUser | undefined> {
     const id = this.emailToId.get(email.toLowerCase());
     const user = id ? this.byId.get(id) : undefined;
     return user ? { ...user } : undefined;
   }
 
-  findById(id: string): StoredUser | undefined {
+  async findById(id: string): Promise<StoredUser | undefined> {
     const user = this.byId.get(id);
     return user ? { ...user } : undefined;
   }
 
-  hasModerator(): boolean {
+  async hasModerator(): Promise<boolean> {
     for (const u of this.byId.values()) {
       if (u.role === 'moderator') return true;
     }
@@ -66,14 +104,7 @@ export class IdentityStore {
   }
 
   /** Headline user stats for pilot metrics (NFR-O-1). */
-  stats(): {
-    total: number;
-    active: number;
-    deactivated: number;
-    suspended: number;
-    banned: number;
-    moderators: number;
-  } {
+  async stats(): Promise<UserStats> {
     const s = { total: 0, active: 0, deactivated: 0, suspended: 0, banned: 0, moderators: 0 };
     for (const u of this.byId.values()) {
       s.total += 1;
@@ -87,21 +118,33 @@ export class IdentityStore {
   }
 
   verifyPassword(user: StoredUser, password: string): boolean {
-    const attempt = scryptSync(password, user.passwordSalt, 64);
-    const expected = Buffer.from(user.passwordHash, 'hex');
-    return attempt.length === expected.length && timingSafeEqual(attempt, expected);
+    return verifyPasswordHash(password, user.passwordSalt, user.passwordHash);
   }
 
-  save(user: StoredUser): void {
+  async save(user: StoredUser): Promise<void> {
     this.byId.set(user.id, user);
   }
 
+  async saveSession(token: string, userId: string): Promise<void> {
+    this.sessions.set(token, userId);
+  }
+
+  async findSession(token: string): Promise<string | undefined> {
+    return this.sessions.get(token);
+  }
+
+  async deleteSession(token: string): Promise<void> {
+    this.sessions.delete(token);
+  }
+
+  async deleteSessionsByUser(userId: string): Promise<void> {
+    for (const [token, id] of this.sessions) {
+      if (id === userId) this.sessions.delete(token);
+    }
+  }
+
   /** Full-fidelity export (includes salted password hashes — handle like a DB dump). */
-  exportState(): {
-    users: StoredUser[];
-    blocked: string[];
-    muted: string[];
-  } {
+  async exportState(): Promise<IdentityExport> {
     return {
       users: [...this.byId.values()].map((u) => ({ ...u })),
       blocked: [...this.blockedPairs()],
@@ -109,7 +152,7 @@ export class IdentityStore {
     };
   }
 
-  importState(state: { users: StoredUser[]; blocked: string[]; muted: string[] }): void {
+  async importState(state: IdentityExport): Promise<void> {
     if (!state || !Array.isArray(state.users)) throw new Error('Invalid identity snapshot.');
     this.byId.clear();
     this.emailToId.clear();
@@ -127,23 +170,23 @@ export class IdentityStore {
     return `${a}:${b}`;
   }
 
-  addBlock(a: string, b: string): void {
+  async addBlock(a: string, b: string): Promise<void> {
     this.blocked.add(this.pairKey(a, b));
   }
 
-  removeBlock(a: string, b: string): void {
+  async removeBlock(a: string, b: string): Promise<void> {
     this.blocked.delete(this.pairKey(a, b));
   }
 
-  addMute(a: string, b: string): void {
+  async addMute(a: string, b: string): Promise<void> {
     this.muted.add(this.pairKey(a, b));
   }
 
-  removeMute(a: string, b: string): void {
+  async removeMute(a: string, b: string): Promise<void> {
     this.muted.delete(this.pairKey(a, b));
   }
 
-  isBlockedOrMuted(a: string, b: string): boolean {
+  async isBlockedOrMuted(a: string, b: string): Promise<boolean> {
     return (
       this.blocked.has(this.pairKey(a, b)) ||
       this.blocked.has(this.pairKey(b, a)) ||

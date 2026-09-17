@@ -16,7 +16,7 @@ export interface HealthReport {
 }
 
 /** Liveness probe over every module seam (NFR-A-1 health check). */
-export function healthCheck(deps: HealthDeps, nowMs = Date.now()): HealthReport {
+export async function healthCheck(deps: HealthDeps, nowMs = Date.now()): Promise<HealthReport> {
   const checks: Record<string, 'ok' | 'fail'> = {};
   const probes: Record<string, () => unknown> = {
     policy: () => deps.policy.disclaimerFor('signup'),
@@ -30,7 +30,7 @@ export function healthCheck(deps: HealthDeps, nowMs = Date.now()): HealthReport 
   };
   for (const [name, probe] of Object.entries(probes)) {
     try {
-      probe();
+      await probe();
       checks[name] = 'ok';
     } catch {
       checks[name] = 'fail';

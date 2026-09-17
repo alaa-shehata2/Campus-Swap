@@ -22,14 +22,14 @@ export interface MetricsDeps {
 }
 
 /** Product metrics dashboard input (NFR-O-1): members, listings, completions, triage, incidents. */
-export function computePilotMetrics(deps: MetricsDeps, nowMs = Date.now()): PilotMetrics {
-  const users = deps.identity.userStats();
-  const listings = deps.listings.store.countByStatus();
-  const exchanges = deps.exchanges.store.exchangeStats();
-  const reports = deps.moderation.store.allReports();
-  const sanctions = deps.moderation.store.getSanctions().length;
-  const handovers = deps.moderation.store.getHandovers().length;
-  const reviews = deps.reputation.store.counts();
+export async function computePilotMetrics(deps: MetricsDeps, nowMs = Date.now()): Promise<PilotMetrics> {
+  const users = await deps.identity.userStats();
+  const listings = await deps.listings.store.countByStatus();
+  const exchanges = await deps.exchanges.store.exchangeStats();
+  const reports = await deps.moderation.store.allReports();
+  const sanctions = (await deps.moderation.store.getSanctions()).length;
+  const handovers = (await deps.moderation.store.getHandovers()).length;
+  const reviews = await deps.reputation.store.counts();
   const safetyIncidents = reports.filter((r) =>
     r.reasonCode === 'stolen-goods' || r.reasonCode === 'unsafe-behavior',
   ).length;

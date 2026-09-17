@@ -5,11 +5,23 @@ function clone(l: Listing): Listing {
   return { ...l, images: [...l.images] };
 }
 
+/** Store port — satisfied by the in-memory store and the MySQL store. */
+export interface ListingsStorePort {
+  insert(listing: Omit<Listing, 'id' | 'createdAt'>): Promise<Listing>;
+  get(id: string): Promise<Listing | undefined>;
+  save(listing: Listing): Promise<void>;
+  all(): Promise<Listing[]>;
+  countActiveByOwner(ownerId: string): Promise<number>;
+  countByStatus(): Promise<Record<Listing['status'], number>>;
+  exportState(): Promise<{ items: Listing[]; order: string[] }>;
+  importState(state: { items: Listing[]; order: string[] }): Promise<void>;
+}
+
 export class ListingsStore {
   private items = new Map<string, Listing>();
   private order: string[] = [];
 
-  insert(listing: Omit<Listing, 'id' | 'createdAt'>): Listing {
+  async insert(listing: Omit<Listing, 'id' | 'createdAt'>): Promise<Listing> {
     const full: Listing = {
       ...listing,
       id: randomUUID(),
@@ -20,37 +32,37 @@ export class ListingsStore {
     return full;
   }
 
-  get(id: string): Listing | undefined {
+  async get(id: string): Promise<Listing | undefined> {
     const item = this.items.get(id);
     return item ? clone(item) : undefined;
   }
 
-  save(listing: Listing): void {
+  async save(listing: Listing): Promise<void> {
     this.items.set(listing.id, clone(listing));
   }
 
-  all(): Listing[] {
+  async all(): Promise<Listing[]> {
     return this.order.map((id) => this.items.get(id)!).filter(Boolean).map(clone);
   }
 
-  countActiveByOwner(ownerId: string): number {
-    return this.all().filter((l) => l.ownerId === ownerId && l.status === 'Active').length;
+  async countActiveByOwner(ownerId: string): Promise<number> {
+    return (await this.all()).filter((l) => l.ownerId === ownerId && l.status === 'Active').length;
   }
 
   /** Listings per lifecycle state for pilot metrics (NFR-O-1). */
-  countByStatus(): Record<Listing['status'], number> {
+  async countByStatus(): Promise<Record<Listing['status'], number>> {
     const counts: Record<Listing['status'], number> = {
       Draft: 0, Active: 0, Paused: 0, Archived: 0, Hidden: 0,
     };
-    for (const l of this.all()) counts[l.status] = (counts[l.status] ?? 0) + 1;
+    for (const l of await this.all()) counts[l.status] = (counts[l.status] ?? 0) + 1;
     return counts;
   }
 
-  exportState(): { items: Listing[]; order: string[] } {
-    return { items: this.all(), order: [...this.order] };
+  async exportState(): Promise<{ items: Listing[]; order: string[] }> {
+    return { items: await this.all(), order: [...this.order] };
   }
 
-  importState(state: { items: Listing[]; order: string[] }): void {
+  async importState(state: { items: Listing[]; order: string[] }): Promise<void> {
     if (!state || !Array.isArray(state.items) || !Array.isArray(state.order)) {
       throw new Error('Invalid listings snapshot.');
     }

@@ -55,13 +55,13 @@ export interface Message {
 
 /** Minimal seams the exchanges module consumes (owned by listings/identity). */
 export interface ListingsPort {
-  get(id: string): Listing | undefined;
-  systemPause(id: string): Result<Listing>;
+  get(id: string): Promise<Listing | undefined>;
+  systemPause(id: string): Promise<Result<Listing>>;
 }
 
 export interface IdentityPort {
-  getProfile(id: string): UserPublic | undefined;
-  isBlockedOrMuted(a: string, b: string): boolean;
+  getProfile(id: string): Promise<UserPublic | undefined>;
+  isBlockedOrMuted(a: string, b: string): Promise<boolean>;
 }
 
 export interface LockStatus {

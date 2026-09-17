@@ -1,0 +1,28 @@
+{
+  "name": "campuswap-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CampusSwap web tier (Next.js, Phase 5 U1) + MySQL repositories",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "seed": "tsx db/seed.ts"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "mysql2": "^3.11.3",
+    "next": "^15.5.25",
+    "postcss": "^8.5.28",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

@@ -13,7 +13,7 @@ import { computePilotMetrics } from '../src/metrics/service.js';
 import { disclaimerFor } from '../src/policy/disclaimers.js';
 import { createPrivacyService } from '../src/privacy/service.js';
 describe('launch audits', () => {
-  it('disclaimers present on all 5 flows with terms link and plain language', () => {
+  it('disclaimers present on all 5 flows with terms link and plain language', async () => {
     const findings = disclaimerAudit();
     assert.equal(findings.length, 5);
     for (const f of findings) {
@@ -21,25 +21,25 @@ describe('launch audits', () => {
     }
   });
 
-  it('Cairo labels hold in winter and summer', () => {
+  it('Cairo labels hold in winter and summer', async () => {
     const audit = cairoLabelAudit();
     assert.equal(audit.ok, true, audit.issues.join('; '));
   });
 
-  it('health check passes on live stores, degrades on failure', () => {
+  it('health check passes on live stores, degrades on failure', async () => {
     const identity = createIdentityService();
     const listings = createListingsService();
     const exchanges = createExchangesService({ listings, identity });
     const reputation = createReputationService({ exchanges });
     const moderation = createModerationService({ listings, identity, reputation });
     const notifications = createNotificationsService();
-    const healthy = healthCheck({
+    const healthy = await healthCheck({
       identity, listings, exchanges, reputation, moderation, notifications,
       policy: { disclaimerFor },
       privacy: createPrivacyService(),
     });
     assert.equal(healthy.status, 'ok');
-    const broken = healthCheck({
+    const broken = await healthCheck({
       identity: { userStats: () => { throw new Error('db down'); } },
       listings, exchanges, reputation, moderation, notifications,
       policy: { disclaimerFor },
@@ -51,7 +51,7 @@ describe('launch audits', () => {
 });
 
 describe('launch gate', () => {
-  function world() {
+  async function world() {
     const identity = createIdentityService();
     const listings = createListingsService();
     const exchanges = createExchangesService({ listings, identity });
@@ -63,7 +63,7 @@ describe('launch gate', () => {
       policy: { disclaimerFor },
       privacy: createPrivacyService(),
     };
-    return { deps, metrics: computePilotMetrics(deps), health: healthCheck(deps) };
+    return { deps, metrics: await computePilotMetrics(deps), health: await healthCheck(deps) };
   }
 
   const attestations = {
@@ -75,8 +75,8 @@ describe('launch gate', () => {
     disclaimerManualPass: true,
   };
 
-  it('fails with everything unattested and names each gap', () => {
-    const w = world();
+  it('fails with everything unattested and names each gap', async () => {
+    const w = await world();
     const gate = evaluateLaunchGate({
       metrics: w.metrics,
       health: w.health,
@@ -96,24 +96,24 @@ describe('launch gate', () => {
     assert.ok(gate.failures.some((f) => /keyboard/i.test(f)));
   });
 
-  it('passes when automated checks hold and humans attest', () => {
-    const w = world();
+  it('passes when automated checks hold and humans attest', async () => {
+    const w = await world();
     const gate = evaluateLaunchGate({
       metrics: w.metrics, health: w.health, moderatorCount: 2, attestations,
     });
     assert.equal(gate.pass, true, gate.failures.join('; '));
   });
 
-  it('requires 2 moderators even when everything else passes', () => {
-    const w = world();
+  it('requires 2 moderators even when everything else passes', async () => {
+    const w = await world();
     const gate = evaluateLaunchGate({
       metrics: w.metrics, health: w.health, moderatorCount: 1, attestations,
     });
     assert.equal(gate.pass, false);
   });
 
-  it('fails when health is degraded or missing', () => {
-    const w = world();
+  it('fails when health is degraded or missing', async () => {
+    const w = await world();
     const degraded = evaluateLaunchGate({
       metrics: w.metrics, health: null, moderatorCount: 2, attestations,
     });

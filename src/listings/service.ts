@@ -1,7 +1,7 @@
 import { fail, ok, type FieldError, type Result } from '../common/errors.js';
 import { isCategory } from '../policy/taxonomy.js';
 import { isProhibited } from '../policy/prohibited.js';
-import { ListingsStore } from './store.js';
+import { ListingsStore, type ListingsStorePort } from './store.js';
 import type {
   Listing,
   ListingTransition,
@@ -14,8 +14,8 @@ export const MAX_ACTIVE_LISTINGS = 20;
 export const MAX_SKILL_IMAGES = 2;
 export const MAX_ITEM_IMAGES = 5;
 
-export function createListingsService(store = new ListingsStore()) {
-  function publish(ownerId: string, input: PublishInput): Result<Listing> {
+export function createListingsService(store: ListingsStorePort = new ListingsStore()) {
+  async function publish(ownerId: string, input: PublishInput): Promise<Result<Listing>> {
     const errors: FieldError[] = [];
 
     if (!['offer', 'request'].includes(input.side)) {
@@ -53,6 +53,13 @@ export function createListingsService(store = new ListingsStore()) {
     }
     if (!input.zone?.trim()) {
       errors.push({ code: 'required', field: 'zone', message: 'Campus zone / meetup area is required.' });
+    }
+    if (input.availability !== undefined && input.availability.length > 200) {
+      errors.push({
+        code: 'too-long',
+        field: 'availability',
+        message: 'Availability must be at most 200 characters.',
+      });
     }
     const maxImages = input.kind === 'item' ? MAX_ITEM_IMAGES : MAX_SKILL_IMAGES;
     if (!Array.isArray(input.images) || input.images.length > maxImages) {
@@ -109,7 +116,7 @@ export function createListingsService(store = new ListingsStore()) {
       ]);
     }
 
-    if (status === 'Active' && store.countActiveByOwner(ownerId) >= MAX_ACTIVE_LISTINGS) {
+    if (status === 'Active' && await store.countActiveByOwner(ownerId) >= MAX_ACTIVE_LISTINGS) {
       return fail([
         {
           code: 'listing-cap-reached',
@@ -118,7 +125,7 @@ export function createListingsService(store = new ListingsStore()) {
       ]);
     }
 
-    const listing = store.insert({
+    const listing = await store.insert({
       ownerId,
       side: input.side,
       kind: input.kind,
@@ -126,6 +133,7 @@ export function createListingsService(store = new ListingsStore()) {
       description,
       category: input.category as Listing['category'],
       zone: input.zone.trim(),
+      availability: input.availability?.trim() ? input.availability.trim() : undefined,
       images: input.images,
       status,
       modality: input.kind === 'item' ? input.modality : undefined,
@@ -139,8 +147,8 @@ export function createListingsService(store = new ListingsStore()) {
     return ok(listing);
   }
 
-  function update(ownerId: string, id: string, patch: Partial<PublishInput>): Result<Listing> {
-    const current = store.get(id);
+  async function update(ownerId: string, id: string, patch: Partial<PublishInput>): Promise<Result<Listing>> {
+    const current = await store.get(id);
     if (!current) return fail([{ code: 'not-found', message: 'Listing not found.' }]);
     if (current.ownerId !== ownerId) {
       return fail([{ code: 'not-permitted', message: 'Only the owner can edit this listing.' }]);
@@ -189,6 +197,14 @@ export function createListingsService(store = new ListingsStore()) {
         ]);
       }
       next.zone = patch.zone.trim();
+    }
+    if (patch.availability !== undefined) {
+      if (patch.availability.length > 200) {
+        return fail([
+          { code: 'too-long', field: 'availability', message: 'Availability must be at most 200 characters.' },
+        ]);
+      }
+      next.availability = patch.availability.trim() ? patch.availability.trim() : undefined;
     }
     if (patch.images !== undefined) {
       const maxImages = next.kind === 'item' ? MAX_ITEM_IMAGES : MAX_SKILL_IMAGES;
@@ -241,12 +257,12 @@ export function createListingsService(store = new ListingsStore()) {
         { code: 'prohibited', message: `This listing cannot be kept (class: ${screened.reason}).` },
       ]);
     }
-    store.save(next);
+    await store.save(next);
     return ok(next);
   }
 
-  function transition(ownerId: string, id: string, to: ListingTransition): Result<Listing> {
-    const listing = store.get(id);
+  async function transition(ownerId: string, id: string, to: ListingTransition): Promise<Result<Listing>> {
+    const listing = await store.get(id);
     if (!listing) return fail([{ code: 'not-found', message: 'Listing not found.' }]);
     if (listing.ownerId !== ownerId) {
       return fail([{ code: 'not-permitted', message: 'Only the owner can change this listing.' }]);
@@ -266,7 +282,7 @@ export function createListingsService(store = new ListingsStore()) {
           { code: 'invalid-transition', field: 'status', message: 'Only Draft listings can be activated.' },
         ]);
       }
-      if (store.countActiveByOwner(ownerId) >= MAX_ACTIVE_LISTINGS) {
+      if (await store.countActiveByOwner(ownerId) >= MAX_ACTIVE_LISTINGS) {
         return fail([
           {
             code: 'listing-cap-reached',
@@ -290,7 +306,7 @@ export function createListingsService(store = new ListingsStore()) {
           { code: 'invalid-transition', field: 'status', message: 'Only Paused listings can be reopened.' },
         ]);
       }
-      if (store.countActiveByOwner(ownerId) >= MAX_ACTIVE_LISTINGS) {
+      if (await store.countActiveByOwner(ownerId) >= MAX_ACTIVE_LISTINGS) {
         return fail([
           {
             code: 'listing-cap-reached',
@@ -300,7 +316,7 @@ export function createListingsService(store = new ListingsStore()) {
       }
       listing.status = 'Active';
     }
-    store.save(listing);
+    await store.save(listing);
     return ok(listing);
   }
 
@@ -310,8 +326,8 @@ export function createListingsService(store = new ListingsStore()) {
    * INTERNAL: never wire to a route without an owner check; HTTP layer must
    * call transition() for user-initiated pauses.
    */
-  function systemPause(id: string): Result<Listing> {
-    const listing = store.get(id);
+  async function systemPause(id: string): Promise<Result<Listing>> {
+    const listing = await store.get(id);
     if (!listing) return fail([{ code: 'not-found', message: 'Listing not found.' }]);
     if (listing.status !== 'Active') {
       return fail([
@@ -319,7 +335,7 @@ export function createListingsService(store = new ListingsStore()) {
       ]);
     }
     listing.status = 'Paused';
-    store.save(listing);
+    await store.save(listing);
     return ok(listing);
   }
 
@@ -327,8 +343,8 @@ export function createListingsService(store = new ListingsStore()) {
    * Moderation hide (FR-M-4). INTERNAL: moderation-only, audit-logged by the caller.
    * Hidden listings leave discovery automatically (only Active is discoverable).
    */
-  function systemHide(id: string): Result<Listing> {
-    const listing = store.get(id);
+  async function systemHide(id: string): Promise<Result<Listing>> {
+    const listing = await store.get(id);
     if (!listing) return fail([{ code: 'not-found', message: 'Listing not found.' }]);
     if (listing.status !== 'Active' && listing.status !== 'Paused') {
       return fail([
@@ -336,7 +352,7 @@ export function createListingsService(store = new ListingsStore()) {
       ]);
     }
     listing.status = 'Hidden';
-    store.save(listing);
+    await store.save(listing);
     return ok(listing);
   }
 
@@ -344,8 +360,8 @@ export function createListingsService(store = new ListingsStore()) {
    * Moderation restore (reverses hide). Parks as Paused so the owner
    * deliberately reopens — no surprise discoverability, cap still applies.
    */
-  function systemUnhide(id: string): Result<Listing> {
-    const listing = store.get(id);
+  async function systemUnhide(id: string): Promise<Result<Listing>> {
+    const listing = await store.get(id);
     if (!listing) return fail([{ code: 'not-found', message: 'Listing not found.' }]);
     if (listing.status !== 'Hidden') {
       return fail([
@@ -353,24 +369,24 @@ export function createListingsService(store = new ListingsStore()) {
       ]);
     }
     listing.status = 'Paused';
-    store.save(listing);
+    await store.save(listing);
     return ok(listing);
   }
 
   /** Deactivation cascade (P-3): archive everything still discoverable or paused. */
-  function deactivateOwner(ownerId: string): number {
+  async function deactivateOwner(ownerId: string): Promise<number> {
     let count = 0;
-    for (const l of store.all()) {
+    for (const l of await store.all()) {
       if (l.ownerId === ownerId && (l.status === 'Active' || l.status === 'Paused')) {
         l.status = 'Archived';
-        store.save(l);
+        await store.save(l);
         count += 1;
       }
     }
     return count;
   }
 
-  function get(id: string): Listing | undefined {
+  async function get(id: string): Promise<Listing | undefined> {
     return store.get(id);
   }
 
