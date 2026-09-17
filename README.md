@@ -3,12 +3,21 @@ A web platform where university students exchange skills and items without money
 
 ## Status
 
-**Phase 1 implemented** (Identity + Listings + Public Discovery — roadmap J0–J2,
-backlog BL-01..BL-06). Single-deployable TypeScript modular monolith
+Single-deployable TypeScript modular monolith
 ([ADR-0001](docs/architecture/adr/0001-typescript-fullstack-monolith.md)),
 MySQL/MariaDB as primary datastore ([ADR-0002](docs/architecture/adr/0002-mysql-primary-datastore.md))
 — domain seams are in-process; repositories are interfaces with in-memory
 adapters so MySQL can back them later without seam changes.
+
+**Phase 1 implemented** (Identity + Listings + Public Discovery — roadmap J0–J2,
+backlog BL-01..BL-06): visitor browses/searches KFS listings; member signs up
+and publishes Offer/Request.
+
+**Phase 2 implemented** (Proposals + Exchange + Scheduling + Completion —
+roadmap J3–J4, backlog BL-07..BL-10): capped proposals (5 open max, lock at
+cap) → accept/decline/withdraw/7-day expiry → auto-pause on accept →
+Scheduled exchange (Cairo time + place, public-spot nudge) → two-step
+completion / cancellation with reason → participant text thread → block/mute.
 
 What works (vertical slice):
 
@@ -48,5 +57,6 @@ docs/
 - Architecture + ADRs: `docs/architecture/`
 - Test strategy: `docs/testing/test-strategy.md`
 - Phase 1 plan: `docs/superpowers/plans/2026-09-17-phase-1-identity-listings-discovery.md`
+- Phase 2 plan: `docs/superpowers/plans/2026-09-17-phase-2-proposals-exchanges.md`
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before changing code.

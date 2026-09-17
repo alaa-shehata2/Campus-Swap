@@ -90,4 +90,25 @@ describe('identity', () => {
     assert.equal(svc.authenticate(undefined as unknown as string, 'password1').ok, false);
     assert.equal(svc.authenticate('e@gmail.com', 'x'.repeat(300)).ok, false);
   });
+
+  it('block/mute stops contact; symmetric check; self-block rejected', () => {
+    const svc = createIdentityService();
+    const a = svc.register({ ...BASE, email: 'a1@gmail.com' });
+    const b = svc.register({ ...BASE, email: 'b1@gmail.com' });
+    assert.equal(a.ok && b.ok, true);
+    if (!a.ok || !b.ok) return;
+    const aid = a.value.id;
+    const bid = b.value.id;
+    assert.equal(svc.isBlockedOrMuted(aid, bid), false);
+    svc.block(aid, bid);
+    assert.equal(svc.isBlockedOrMuted(aid, bid), true);
+    assert.equal(svc.isBlockedOrMuted(bid, aid), true);
+    svc.unblock(aid, bid);
+    assert.equal(svc.isBlockedOrMuted(aid, bid), false);
+    svc.mute(bid, aid);
+    assert.equal(svc.isBlockedOrMuted(aid, bid), true);
+    svc.unmute(bid, aid);
+    assert.equal(svc.isBlockedOrMuted(aid, bid), false);
+    assert.throws(() => svc.block(aid, aid), /cannot block yourself/i);
+  });
 });

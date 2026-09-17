@@ -220,8 +220,7 @@ describe('listings', () => {
     if (!r.ok) assert.ok(r.errors.some((e) => e.field === 'status'));
   });
 
-  it('edits category/zone/images on update with validation', () => {
-    const svc = createListingsService();
+  it('edits category/zone/images on update with validation', () => {    const svc = createListingsService();
     const created = svc.publish('u1', {
       side: 'offer',
       kind: 'skill',
@@ -241,5 +240,25 @@ describe('listings', () => {
     }
     const badCat = svc.update('u1', created.value.id, { category: 'nope' });
     assert.equal(badCat.ok, false);
+  });
+
+  it('systemPause pauses Active listings without owner check (auto-pause)', () => {
+    const svc = createListingsService();
+    const created = svc.publish('u1', {
+      side: 'offer',
+      kind: 'skill',
+      title: 'Python tutoring',
+      description: 'I teach Python basics.',
+      category: 'tutoring',
+      zone: 'North campus',
+      images: [],
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    const paused = svc.systemPause(created.value.id);
+    assert.equal(paused.ok, true);
+    if (paused.ok) assert.equal(paused.value.status, 'Paused');
+    assert.equal(svc.systemPause(created.value.id).ok, false);
+    assert.equal(svc.systemPause('missing').ok, false);
   });
 });

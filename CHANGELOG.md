@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-17 — Phase 2: Proposals + Exchange + Scheduling + Completion (BL-07..BL-10)
+
+- Exchanges seam: reciprocal proposals (≥1 listing/side, terms required),
+  5-open cap with `proposal-cap-reached` + derived lock, decline/withdraw/
+  7-day expiry, counterparty-only accept creating a Scheduled exchange.
+- Accept auto-pauses referenced listings (`listings.systemPause`); second
+  accept `listing-paused` until owner reopens; terms frozen at accept.
+- Scheduling with Cairo-labeled time + place, public-spot nudge, private-place
+  safety acknowledgement gate.
+- Two-step completion (Done → Confirm/Dispute ≤7 days, auto-complete on
+  silence with log), schedule-less completion only with override + reason,
+  cancellation with reason codes.
+- Participant-only plain-text thread; identity block/mute enforced on
+  proposals and messages.
+- 60 tests green (`npm test`), `tsc --noEmit` clean.
+
 ## 2026-09-17 — Phase 1: Identity + Listings + Public Discovery (BL-01..BL-06)
 
 - Identity seam: any-email signup with campus default (KFS), 18+ gate, rules

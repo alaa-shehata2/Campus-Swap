@@ -20,6 +20,9 @@ function toPublic(user: StoredUser): UserPublic {
 
 export function createIdentityService(store = new IdentityStore()) {
   const sessions = new Map<string, string>();
+  /** Block/mute pairs. Key `${a}:${b}` means a blocked-or-muted b (FR-M-6). */
+  const blocked = new Set<string>();
+  const muted = new Set<string>();
 
   function register(input: RegisterInput): Result<UserPublic> {
     const errors: FieldError[] = [];
@@ -143,7 +146,51 @@ export function createIdentityService(store = new IdentityStore()) {
     sessions.delete(token);
   }
 
-  return { register, authenticate, resolveSession, logout, getProfile, updateProfile };
+  function pairKey(a: string, b: string): string {
+    return `${a}:${b}`;
+  }
+
+  /** Block stops proposals/messages from that user (FR-M-6). Symmetric enforcement. */
+  function block(userId: string, blockedId: string): void {
+    if (userId === blockedId) throw new Error('You cannot block yourself.');
+    blocked.add(pairKey(userId, blockedId));
+  }
+
+  function unblock(userId: string, blockedId: string): void {
+    blocked.delete(pairKey(userId, blockedId));
+  }
+
+  function mute(userId: string, mutedId: string): void {
+    if (userId === mutedId) throw new Error('You cannot mute yourself.');
+    muted.add(pairKey(userId, mutedId));
+  }  function unmute(userId: string, mutedId: string): void {
+    muted.delete(pairKey(userId, mutedId));
+  }
+
+  /** MVP decision: mute is enforced symmetrically like block (stops proposals/messages
+   * either direction). A directional mute is post-MVP. */
+  function isBlockedOrMuted(a: string, b: string): boolean {
+    return (
+      blocked.has(pairKey(a, b)) ||
+      blocked.has(pairKey(b, a)) ||
+      muted.has(pairKey(a, b)) ||
+      muted.has(pairKey(b, a))
+    );
+  }
+
+  return {
+    register,
+    authenticate,
+    resolveSession,
+    logout,
+    getProfile,
+    updateProfile,
+    block,
+    unblock,
+    mute,
+    unmute,
+    isBlockedOrMuted,
+  };
 }
 
 export type IdentityService = ReturnType<typeof createIdentityService>;
