@@ -42,6 +42,19 @@ module was implemented.
 | `tests/notifications-wiring.test.ts` | cross-module emits | proposal/schedule/completion notifications, no pre-reveal leak, reporter-only updates, void/unhide/handover notices |
 | `tests/privacy.test.ts` | `privacy` + `moderation.viewThread` | 12/24-mo retention boundaries, deactivation hides discovery, purpose-scoped thread reads denied+logged/allowed+logged (P-3/P-4) |
 
+## Seam tests (Phase 4, implemented)
+
+| Suite | Seam | Covers |
+|---|---|---|
+| `tests/metrics.test.ts` | `metrics.computePilotMetrics/pilotProgress` | member/listing/completion/report/sanction/review counts, median triage math, D12 progress met/unmet (BL-18) |
+| `tests/launch.test.ts` | `launch.disclaimerAudit/cairoLabelAudit/healthCheck/evaluateLaunchGate` | 5-flow disclaimer presence + Terms + plain language, winter/summer Cairo labels, ok/degraded health, gate fails closed on attestations/moderators (BL-15/17/18) |
+| `tests/snapshot.test.ts` | `launch.createSnapshot/restoreSnapshot` | round-trip preserves metrics/login/audit/inbox; unknown versions rejected (BL-18) |
+
+## Manual audits (human-owned, attested in the launch gate)
+
+- Keyboard-only J0–J6 + report pass; disclaimer contrast/readability + screen-reader bar (no UI in repo yet).
+- Terms v1 + privacy notice authorship + sign-off; KFS student-affairs consult note (Phase 0, human developer).
+
 ## Planned (later phases)
 
 - Phase 3: blind-reveal/response/aggregate, report/triage/sanction/

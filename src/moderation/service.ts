@@ -17,6 +17,7 @@ import type { Review } from '../reputation/types.js';
 
 export const MAX_REPORT_IMAGES = 3;
 export const MIN_OTHER_DESCRIPTION = 20;
+export const MAX_REPORT_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const REASON_CODES: ReasonCode[] = [
   'haram-content',
@@ -34,6 +35,8 @@ const SANCTION_ACTIONS: SanctionAction[] = ['hide', 'unhide', 'warn', 'suspend',
 const MEMBER_SANCTIONS: SanctionAction[] = ['hide', 'warn', 'suspend', 'ban'];
 
 export interface ModerationDeps {
+  /** Verified platform-owner identity used for stolen-item handover approval. */
+  ownerId?: string;
   listings: {
     get(id: string): Listing | undefined;
     systemHide(id: string): Result<Listing>;
@@ -42,6 +45,7 @@ export interface ModerationDeps {
   identity: {
     getProfile(id: string): UserPublic | undefined;
     restrict(userId: string, restriction: Restriction): void;
+    authorizeMemberSession?(token: unknown): Result<string>;
   };
   reputation: {
     voidReview(by: string, id: string, reason: string): Result<Review>;
@@ -88,7 +92,8 @@ export function createModerationService(
       images: string[];
     },
   ): Result<Report> {
-    if (!deps.identity.getProfile(reporterId)) {
+    const reporter = deps.identity.getProfile(reporterId);
+    if (!reporter || reporter.restriction !== 'none') {
       return fail([{ code: 'not-found', message: 'Reporter not found.' }]);
     }
     const targetExists =
@@ -125,6 +130,9 @@ export function createModerationService(
         },
       ]);
     }
+    if (input.images.some((image) => !isSafeImageReference(image))) {
+      return fail([{ code: 'invalid', field: 'images', message: 'Images must be valid, non-executable references no larger than 10 MB.' }]);
+    }
     const atMs = now();
     const created = store.insertReport({
       reporterId,
@@ -151,6 +159,12 @@ export function createModerationService(
     }
     deps.notify?.emit(reporterId, 'report-status', created.id);
     return ok(created);
+  }
+
+  function reportForSession(token: unknown, input: Parameters<typeof report>[1]): Result<Report> {
+    const auth = deps.identity.authorizeMemberSession?.(token) ??
+      fail<string>([{ code: 'not-configured', message: 'Authenticated reporting is not configured.' }]);
+    return auth.ok ? report(auth.value, input) : auth;
   }
 
   function getReport(id: string): Report | undefined {
@@ -312,7 +326,12 @@ export function createModerationService(
       ]);
     }
     const approver = deps.identity.getProfile(input.ownerApprovedBy);
-    if (!approver || approver.role !== 'moderator' || input.ownerApprovedBy === moderatorId) {
+    if (
+      !approver ||
+      approver.role !== 'moderator' ||
+      input.ownerApprovedBy === moderatorId ||
+      (deps.ownerId !== undefined && input.ownerApprovedBy !== deps.ownerId)
+    ) {
       return fail([
         {
           code: 'handover-approval-required',
@@ -378,7 +397,14 @@ export function createModerationService(
     return entries.sort((a, b) => a.atMs - b.atMs);
   }
 
-  return { report, getReport, triage, sanction, unhide, clearRestriction, voidReview, escalate, viewThread, auditLog, store };
+  return { report, reportForSession, getReport, triage, sanction, unhide, clearRestriction, voidReview, escalate, viewThread, auditLog, store };
+}
+
+function isSafeImageReference(image: unknown): image is string {
+  if (typeof image !== 'string' || image.length === 0 || image.length > MAX_REPORT_IMAGE_BYTES) return false;
+  if (/\.((?:exe|bat|cmd|com|js|mjs|sh|ps1|dll))(?:$|[?#])/i.test(image)) return false;
+  if (image.startsWith('data:')) return /^data:image\/(?:png|jpe?g|webp|gif);base64,/.test(image);
+  return /^(?:https?:\/\/|\/|[A-Za-z0-9._-]+$)/.test(image);
 }
 
 export type ModerationService = ReturnType<typeof createModerationService>;

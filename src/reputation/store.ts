@@ -44,9 +44,30 @@ export class ReputationStore {
     return out;
   }
 
+  /** Review counts for pilot metrics (NFR-O-1). */
+  counts(): { total: number; published: number } {
+    let total = 0;
+    let published = 0;
+    for (const r of this.items.values()) {
+      total += 1;
+      if (r.status === 'Published') published += 1;
+    }
+    return { total, published };
+  }
+
   exchangeIds(): string[] {
     const ids = new Set<string>();
     for (const r of this.items.values()) ids.add(r.exchangeId);
     return [...ids];
+  }
+
+  exportState(): Review[] {
+    return [...this.items.values()].map(clone);
+  }
+
+  importState(reviews: Review[]): void {
+    if (!Array.isArray(reviews)) throw new Error('Invalid reputation snapshot.');
+    this.items.clear();
+    for (const r of reviews) this.items.set(r.id, clone(r));
   }
 }

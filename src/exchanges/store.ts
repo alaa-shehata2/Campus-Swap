@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Exchange, Message, Proposal } from './types.js';
+import type { Exchange, ExchangeStatus, Message, Proposal, ProposalStatus } from './types.js';
 
 function cloneProposal(p: Proposal): Proposal {
   return { ...p, sideAListingIds: [...p.sideAListingIds], sideBListingIds: [...p.sideBListingIds] };
@@ -48,8 +48,7 @@ export class ExchangesStore {
     return out;
   }
 
-  proposedOlderThan(nowMs: number, windowMs: number): Proposal[] {
-    const out: Proposal[] = [];
+  proposedOlderThan(nowMs: number, windowMs: number): Proposal[] {    const out: Proposal[] = [];
     for (const p of this.proposals.values()) {
       if (p.status === 'Proposed' && nowMs - p.createdAtMs > windowMs) out.push(cloneProposal(p));
     }
@@ -108,5 +107,59 @@ export class ExchangesStore {
 
   messagesFor(exchangeId: string): Message[] {
     return (this.messages.get(exchangeId) ?? []).map((m) => ({ ...m }));
+  }
+
+  exportState(): {
+    proposals: Proposal[];
+    exchanges: Exchange[];
+    messages: Record<string, Message[]>;
+    holds: Array<[string, string]>;
+  } {
+    const messages: Record<string, Message[]> = {};
+    for (const [id, list] of this.messages) messages[id] = list.map((m) => ({ ...m }));
+    return {
+      proposals: [...this.proposals.values()].map(cloneProposal),
+      exchanges: [...this.exchanges.values()].map(cloneExchange),
+      messages,
+      holds: [...this.holds.entries()],
+    };
+  }
+
+  importState(state: {
+    proposals: Proposal[];
+    exchanges: Exchange[];
+    messages: Record<string, Message[]>;
+    holds: Array<[string, string]>;
+  }): void {
+    if (!state || !Array.isArray(state.proposals) || !Array.isArray(state.exchanges)) {
+      throw new Error('Invalid exchanges snapshot.');
+    }
+    this.proposals.clear();
+    this.exchanges.clear();
+    this.messages.clear();
+    this.holds.clear();
+    for (const p of state.proposals) this.proposals.set(p.id, cloneProposal(p));
+    for (const e of state.exchanges) this.exchanges.set(e.id, cloneExchange(e));
+    for (const [id, list] of Object.entries(state.messages ?? {})) {
+      this.messages.set(id, list.map((m) => ({ ...m })));
+    }
+    for (const [k, v] of state.holds ?? []) this.holds.set(k, v);
+  }
+
+  /** Exchange/proposal counts per state for pilot metrics (NFR-O-1). */
+  exchangeStats(): Record<ExchangeStatus, number> {
+    const counts: Record<ExchangeStatus, number> = {
+      Scheduled: 0, Completed: 0, Cancelled: 0, Disputed: 0,
+    };
+    for (const e of this.exchanges.values()) counts[e.status] = (counts[e.status] ?? 0) + 1;
+    return counts;
+  }
+
+  proposalStats(): Record<ProposalStatus, number> {
+    const counts: Record<ProposalStatus, number> = {
+      Proposed: 0, Accepted: 0, Declined: 0, Expired: 0, Withdrawn: 0,
+    };
+    for (const p of this.proposals.values()) counts[p.status] = (counts[p.status] ?? 0) + 1;
+    return counts;
   }
 }

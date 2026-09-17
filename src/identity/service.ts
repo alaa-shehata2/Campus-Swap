@@ -21,9 +21,6 @@ function toPublic(user: StoredUser): UserPublic {
 
 export function createIdentityService(store = new IdentityStore()) {
   const sessions = new Map<string, string>();
-  /** Block/mute pairs. Key `${a}:${b}` means a blocked-or-muted b (FR-M-6). */
-  const blocked = new Set<string>();
-  const muted = new Set<string>();
 
   function register(input: RegisterInput): Result<UserPublic> {
     const errors: FieldError[] = [];
@@ -198,52 +195,76 @@ export function createIdentityService(store = new IdentityStore()) {
   }
 
   /** Resolve a session token to its owner. HTTP layer must bind this to mutations (S-1/S-2). */
-  function resolveSession(token: string): string | undefined {
-    return sessions.get(token);
+  function resolveSession(token: unknown): string | undefined {
+    if (typeof token !== 'string') return undefined;
+    const userId = sessions.get(token);
+    const user = userId ? store.findById(userId) : undefined;
+    if (!user || user.deactivated || user.restriction !== 'none') {
+      sessions.delete(token);
+      return undefined;
+    }
+    return userId;
+  }
+
+  /** Session check for authenticated mutations (S-1): any active account holder acts, including moderators. */
+  function authorizeMemberSession(token: unknown): Result<string> {
+    const userId = resolveSession(token);
+    if (!userId) return fail([{ code: 'login-required', message: 'A valid member session is required.' }]);
+    const user = store.findById(userId);
+    if (!user || (user.role !== 'member' && user.role !== 'moderator')) {
+      return fail([{ code: 'not-permitted', message: 'Only member sessions can perform this action.' }]);
+    }
+    return ok(userId);
   }
 
   function logout(token: string): void {
     sessions.delete(token);
   }
 
-  function pairKey(a: string, b: string): string {
-    return `${a}:${b}`;
-  }
-
   /** Block stops proposals/messages from that user (FR-M-6). Symmetric enforcement. */
   function block(userId: string, blockedId: string): void {
     if (userId === blockedId) throw new Error('You cannot block yourself.');
-    blocked.add(pairKey(userId, blockedId));
+    store.addBlock(userId, blockedId);
   }
 
   function unblock(userId: string, blockedId: string): void {
-    blocked.delete(pairKey(userId, blockedId));
+    store.removeBlock(userId, blockedId);
   }
 
   function mute(userId: string, mutedId: string): void {
     if (userId === mutedId) throw new Error('You cannot mute yourself.');
-    muted.add(pairKey(userId, mutedId));
+    store.addMute(userId, mutedId);
   }
 
   function unmute(userId: string, mutedId: string): void {
-    muted.delete(pairKey(userId, mutedId));
+    store.removeMute(userId, mutedId);
   }
 
   /** MVP decision: mute is enforced symmetrically like block (stops proposals/messages
    * either direction). A directional mute is post-MVP. */
   function isBlockedOrMuted(a: string, b: string): boolean {
-    return (
-      blocked.has(pairKey(a, b)) ||
-      blocked.has(pairKey(b, a)) ||
-      muted.has(pairKey(a, b)) ||
-      muted.has(pairKey(b, a))
-    );
+    return store.isBlockedOrMuted(a, b);
+  }
+
+  /** Narrow read for metrics/health: headline user stats, no secrets. */
+  function userStats(): ReturnType<IdentityStore['stats']> {
+    return store.stats();
+  }
+
+  /** Backup/restore delegates (snapshot files are sensitive — see launch/snapshot.ts). */
+  function exportUsers(): ReturnType<IdentityStore['exportState']> {
+    return store.exportState();
+  }
+
+  function importUsers(state: Parameters<IdentityStore['importState']>[0]): void {
+    store.importState(state);
   }
 
   return {
     register,
     authenticate,
     resolveSession,
+    authorizeMemberSession,
     logout,
     getProfile,
     updateProfile,
@@ -255,6 +276,9 @@ export function createIdentityService(store = new IdentityStore()) {
     restrict,
     deactivate,
     setRole,
+    userStats,
+    exportUsers,
+    importUsers,
   };
 }
 

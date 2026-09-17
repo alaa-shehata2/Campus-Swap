@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-17 — Phase 4: Pilot Hardening & Launch (BL-15..BL-18)
+
+- Metrics seam: pilot dashboard input (members, listings, completions,
+  report states, median triage latency, sanctions, handovers, reviews) +
+  D12 progress tracking.
+- Launch seam: readiness gate encoding NFR §10 (fails closed; Terms,
+  consult, keyboard, and manual disclaimer audits are human attestations),
+  disclaimer-presence + plain-language audit on all 5 flows, winter/summer
+  Cairo-label audit, per-seam health check.
+- Backup/restore: full-fidelity snapshot round-trip demonstrated by test
+  (metrics/login/audit/inbox preserved; unknown versions rejected).
+  Snapshots are sensitive (salted hashes included) — handled like DB dumps.
+- 116 tests green (`npm test`), `tsc --noEmit` clean.
+
 ## 2026-09-17 — Phase 3: Reviews + Reports + Moderation + Notifications (BL-11..BL-14)
 
 - Reputation seam: blind bilateral reviews (one 1–5 + ≤1000 text per

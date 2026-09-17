@@ -27,7 +27,7 @@ export function createPrivacyService(opts: { now?: () => number } = {}) {
     nowMs: number,
   ): boolean {
     const window = kind === 'message' ? MESSAGE_RETENTION_MS : LOG_RETENTION_MS;
-    return nowMs - referenceMs > window;
+    return nowMs - referenceMs >= window;
   }
 
   /** Counts preserved, text dropped (P-3). */

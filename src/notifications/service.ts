@@ -74,7 +74,17 @@ export function createNotificationsService(opts: { now?: () => number } = {}) {
     }
   }
 
-  return { emit, inbox, unreadCount, markRead, markAllRead };
+  function exportState(): NotificationItem[] {
+    return items.map((i) => ({ ...i }));
+  }
+
+  function importState(state: NotificationItem[]): void {
+    if (!Array.isArray(state)) throw new Error('Invalid notifications snapshot.');
+    items.length = 0;
+    for (const i of state) items.push({ ...i });
+  }
+
+  return { emit, inbox, unreadCount, markRead, markAllRead, exportState, importState };
 }
 
 export type NotificationsService = ReturnType<typeof createNotificationsService>;

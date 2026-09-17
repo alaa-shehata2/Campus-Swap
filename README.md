@@ -26,6 +26,13 @@ aggregate; report flow with reason codes + triage states; moderation sanctions
 handover; in-app notification inbox (no email); retention clocks + case-gated
 moderator reads.
 
+**Phase 4 implemented** (Pilot Hardening & Launch — roadmap Phase 4, backlog
+BL-15..BL-18): D12 metrics + progress tracking; launch-gate evaluator (NFR
+§10, fails closed on human attestations); disclaimer-presence + Cairo-label
+audits; per-seam health check; backup/restore snapshot round-trip. Manual
+UI audits (keyboard, contrast, screen reader) and Terms authorship remain
+human-owned attestations — no UI exists in this repo yet.
+
 What works (vertical slice):
 
 - Visitor browses/searches KFS listings without login; actions show a login CTA.
@@ -66,5 +73,6 @@ docs/
 - Phase 1 plan: `docs/superpowers/plans/2026-09-17-phase-1-identity-listings-discovery.md`
 - Phase 2 plan: `docs/superpowers/plans/2026-09-17-phase-2-proposals-exchanges.md`
 - Phase 3 plan: `docs/superpowers/plans/2026-09-17-phase-3-reviews-moderation-notifications.md`
+- Phase 4 plan: `docs/superpowers/plans/2026-09-17-phase-4-pilot-hardening.md`
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before changing code.

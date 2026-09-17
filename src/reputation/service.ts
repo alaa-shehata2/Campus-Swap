@@ -8,11 +8,15 @@ export const REVEAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 export const REVIEW_EDIT_MS = 48 * 60 * 60 * 1000;
 
 export function createReputationService(
-  deps: { exchanges: ExchangesPort; notify?: NotifyPort },
+  deps: { exchanges: ExchangesPort; identity?: { authorizeMemberSession(token: unknown): Result<string> }; notify?: NotifyPort },
   opts: { now?: () => number; store?: ReputationStore } = {},
 ) {
   const store = opts.store ?? new ReputationStore();
   const now = opts.now ?? Date.now;
+  function authorize(token: unknown): Result<string> {
+    return deps.identity?.authorizeMemberSession(token) ??
+      fail([{ code: 'not-configured', message: 'Authenticated reputation mutations are not configured.' }]);
+  }
 
   function submitReview(
     reviewerId: string,
@@ -110,7 +114,7 @@ export function createReputationService(
     if (r.status === 'Voided') {
       return fail([{ code: 'invalid-transition', message: 'Voided reviews cannot be edited.' }]);
     }
-    if (now() - r.submittedAtMs > REVIEW_EDIT_MS) {
+    if (now() - r.submittedAtMs >= REVIEW_EDIT_MS) {
       return fail([
         { code: 'edit-window-passed', message: 'The 48-hour edit window has passed.' },
       ]);
@@ -201,7 +205,7 @@ export function createReputationService(
     if (!r || r.revieweeId !== revieweeId || !r.response) {
       return fail([{ code: 'not-found', message: 'Response not found.' }]);
     }
-    if (now() - r.response.submittedAtMs > REVIEW_EDIT_MS) {
+    if (now() - r.response.submittedAtMs >= REVIEW_EDIT_MS) {
       return fail([
         { code: 'edit-window-passed', message: 'The 48-hour edit window has passed.' },
       ]);
@@ -252,7 +256,25 @@ export function createReputationService(
     return published;
   }
 
-  return { submitReview, getReview, editReview, revealDue, aggregate, respondToReview, editResponse, voidReview, store };
+  function submitReviewForSession(token: unknown, exchangeId: string, input: SubmitReviewInput): Result<Review> {
+    const auth = authorize(token);
+    return auth.ok ? submitReview(auth.value, exchangeId, input) : auth;
+  }
+  function editReviewForSession(token: unknown, id: string, patch: Partial<SubmitReviewInput>): Result<Review> {
+    const auth = authorize(token);
+    return auth.ok ? editReview(auth.value, id, patch) : auth;
+  }
+  function respondToReviewForSession(token: unknown, id: string, input: RespondInput): Result<Review> {
+    const auth = authorize(token);
+    return auth.ok ? respondToReview(auth.value, id, input) : auth;
+  }
+  function editResponseForSession(token: unknown, id: string, input: RespondInput): Result<Review> {
+    const auth = authorize(token);
+    return auth.ok ? editResponse(auth.value, id, input) : auth;
+  }
+
+  return { submitReview, submitReviewForSession, getReview, editReview, editReviewForSession, revealDue,
+    aggregate, respondToReview, respondToReviewForSession, editResponse, editResponseForSession, voidReview, store };
 }
 
 export interface RespondInput {

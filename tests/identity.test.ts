@@ -169,4 +169,20 @@ describe('identity', () => {
     svc.setRole(m.value.id, u.value.id, 'moderator');
     assert.equal(svc.getProfile(u.value.id)?.role, 'moderator');
   });
+
+  it('authorizeMemberSession accepts member and moderator sessions', () => {
+    const svc = createIdentityService();
+    const m = svc.register({ ...BASE, email: 'sess-mod@gmail.com' });
+    const u = svc.register({ ...BASE, email: 'sess-user@gmail.com' });
+    assert.equal(m.ok && u.ok, true);
+    if (!m.ok || !u.ok) return;
+    svc.setRole('bootstrap', m.value.id, 'moderator');
+    const modAuth = svc.authenticate('sess-mod@gmail.com', 'password1');
+    const userAuth = svc.authenticate('sess-user@gmail.com', 'password1');
+    assert.equal(modAuth.ok && userAuth.ok, true);
+    if (!modAuth.ok || !userAuth.ok) return;
+    assert.equal(svc.authorizeMemberSession(modAuth.value.token).ok, true);
+    assert.equal(svc.authorizeMemberSession(userAuth.value.token).ok, true);
+    assert.equal(svc.authorizeMemberSession('bogus-token').ok, false);
+  });
 });

@@ -14,6 +14,6 @@ export function disclaimerFor(flow: DisclaimerFlow): string {
     `Notice (${flow}): CampusSwap is a money-free student exchange. ` +
     `Meet in public on-campus spots where possible; the platform has zero ` +
     `liability for damage, loss, theft, or safety outcomes. ` +
-    `See the full Terms before continuing.`
+    `Read the full Terms at /terms before continuing.`
   );
 }

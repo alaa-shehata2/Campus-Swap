@@ -21,6 +21,11 @@ export class ModerationStore {
     return r ? structuredClone(r) : undefined;
   }
 
+  /** All reports for metrics (triage latency) and audits. */
+  allReports(): Report[] {
+    return [...this.reports.values()].map((r) => structuredClone(r));
+  }
+
   saveReport(r: Report): void {
     this.reports.set(r.id, structuredClone(r));
   }
@@ -74,5 +79,41 @@ export class ModerationStore {
       if (r.status === 'Under review') out.push(structuredClone(r));
     }
     return out;
+  }
+
+  exportState(): {
+    reports: Report[];
+    sanctions: Sanction[];
+    voids: ReviewVoid[];
+    handovers: Handover[];
+    openCases: string[];
+  } {
+    return {
+      reports: [...this.reports.values()].map((r) => structuredClone(r)),
+      sanctions: this.getSanctions(),
+      voids: this.getVoids(),
+      handovers: this.getHandovers(),
+      openCases: [...this.openCases],
+    };
+  }
+
+  importState(state: {
+    reports: Report[];
+    sanctions: Sanction[];
+    voids: ReviewVoid[];
+    handovers: Handover[];
+    openCases: string[];
+  }): void {
+    if (!state || !Array.isArray(state.reports)) throw new Error('Invalid moderation snapshot.');
+    this.reports.clear();
+    this.sanctions = [];
+    this.voids = [];
+    this.handovers = [];
+    this.openCases.clear();
+    for (const r of state.reports) this.reports.set(r.id, structuredClone(r));
+    for (const s of state.sanctions ?? []) this.sanctions.push({ ...s });
+    for (const v of state.voids ?? []) this.voids.push({ ...v });
+    for (const h of state.handovers ?? []) this.handovers.push(structuredClone(h));
+    for (const c of state.openCases ?? []) this.openCases.add(c);
   }
 }
