@@ -11,6 +11,22 @@ export type ReasonCode =
   | 'policy-academic'
   | 'other';
 
+export const REASON_CODES: ReasonCode[] = [
+  'haram-content',
+  'medical-legal',
+  'money-request',
+  'stolen-goods',
+  'spam-commercial',
+  'harassment',
+  'unsafe-behavior',
+  'policy-academic',
+  'other',
+];
+
+export const MAX_REPORT_IMAGES = 3;
+export const MIN_OTHER_DESCRIPTION = 20;
+export const MAX_REPORT_IMAGE_BYTES = 10 * 1024 * 1024;
+
 export type ReportStatus = 'Received' | 'Under review' | 'Resolved';
 
 export interface ReportInput {

@@ -2,13 +2,15 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getDetail } from '../../../../src/listings/search.js';
 import { formatCairoTime } from '../../../../src/common/cairoTime.js';
-import { services } from '../../../lib/services.js';
+import { services, sweepExchanges } from '../../../lib/services.js';
 import { sessionUserId } from '../../../lib/auth.js';
 import { ListingCard } from '../../../components/ListingCard';
 
 export default async function ListingDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { listings } = services();
+  const svc = services();
+  await sweepExchanges(svc);
+  const { listings } = svc;
   const viewerId = await sessionUserId();
   const detail = await getDetail(
     listings.store,
@@ -17,6 +19,8 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
   );
   if (!detail) notFound();
   const l = detail.listing;
+  const isOwner = viewerId !== undefined && viewerId === l.ownerId;
+  const lock = await svc.exchanges.lockStatus(l.id);
   return (
     <div className="space-y-6">
       <Link href="/" className="text-sm underline">
@@ -61,7 +65,12 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
             </dd>
           </div>
         </dl>
-        <div className="mt-6">
+        <div className="mt-6 space-y-3">
+          {lock.locked && (
+            <p role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-stone-800">
+              Not accepting new proposals — {lock.openCount} pending.
+            </p>
+          )}
           {detail.loginCTA ? (
             <Link
               href={`/login?returnTo=/listings/${l.id}`}
@@ -69,9 +78,33 @@ export default async function ListingDetail({ params }: { params: Promise<{ id: 
             >
               Log in to propose
             </Link>
-          ) : (
+          ) : isOwner ? (
             <p className="rounded border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600">
-              Proposals open in U2 — for now, browse and publish.
+              Your listing · {lock.openCount} open proposal{lock.openCount === 1 ? '' : 's'} ·{' '}
+              <Link href="/proposals" className="underline">
+                View proposals
+              </Link>
+            </p>
+          ) : (
+            <Link
+              href={`/proposals/new?listing=${l.id}`}
+              className="inline-block rounded bg-emerald-700 px-4 py-2 font-medium text-white"
+            >
+              Propose an exchange
+            </Link>
+          )}
+          {!isOwner && (
+            <p className="text-sm">
+              <Link
+                href={
+                  detail.loginCTA
+                    ? `/login?returnTo=/reports/new?targetType=listing&targetId=${l.id}`
+                    : `/reports/new?targetType=listing&targetId=${l.id}`
+                }
+                className="underline"
+              >
+                Report this listing
+              </Link>
             </p>
           )}
         </div>

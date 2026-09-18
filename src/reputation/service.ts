@@ -1,15 +1,12 @@
 import { fail, ok, type Result } from '../common/errors.js';
 import type { NotifyPort } from '../notifications/types.js';
-import { ReputationStore } from './store.js';
+import { ReputationStore, type ReputationStorePort } from './store.js';
 import type { Aggregate, ExchangesPort, Review, SubmitReviewInput } from './types.js';
-
-export const MAX_REVIEW_TEXT = 1000;
-export const REVEAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-export const REVIEW_EDIT_MS = 48 * 60 * 60 * 1000;
+import { MAX_REVIEW_TEXT, REVEAL_WINDOW_MS, REVIEW_EDIT_MS } from './types.js';
 
 export function createReputationService(
   deps: { exchanges: ExchangesPort; identity?: { authorizeMemberSession(token: unknown): Result<string> }; notify?: NotifyPort },
-  opts: { now?: () => number; store?: ReputationStore } = {},
+  opts: { now?: () => number; store?: ReputationStorePort } = {},
 ) {
   const store = opts.store ?? new ReputationStore();
   const now = opts.now ?? Date.now;
@@ -82,7 +79,7 @@ export function createReputationService(
         r.status = 'Published';
         r.publishedAtMs = atMs;
         await store.save(r);
-        deps.notify?.emit(r.revieweeId, 'review-published', r.id);
+        await deps.notify?.emit(r.revieweeId, 'review-published', r.id);
       }
       return hidden;
     }
@@ -196,7 +193,7 @@ export function createReputationService(
     }
     r.response = { text, submittedAtMs: now() };
     await store.save(r);
-    deps.notify?.emit(r.reviewerId, 'review-response', r.id);
+    await deps.notify?.emit(r.reviewerId, 'review-response', r.id);
     return ok(r);
   }
 
@@ -243,7 +240,7 @@ export function createReputationService(
     r.status = 'Voided';
     r.void = { by, reason: reason.trim(), atMs: now() };
     await store.save(r);
-    deps.notify?.emit(r.revieweeId, 'moderation-action', r.id);
+    await deps.notify?.emit(r.revieweeId, 'moderation-action', r.id);
     return ok(r);
   }
 
@@ -282,3 +279,6 @@ export interface RespondInput {
 }
 
 export type ReputationService = ReturnType<typeof createReputationService>;
+
+/** Re-exported from types.js so client bundles can import it without node deps. */
+export { MAX_REVIEW_TEXT, REVEAL_WINDOW_MS, REVIEW_EDIT_MS };

@@ -1,5 +1,5 @@
 import { fail, ok, type FieldError, type Result } from '../common/errors.js';
-import { ModerationStore } from './store.js';
+import { ModerationStore, type ModerationStorePort } from './store.js';
 import type {
   AuditEntry,
   Handover,
@@ -9,27 +9,14 @@ import type {
   Sanction,
   SanctionAction,
 } from './types.js';
+import { MAX_REPORT_IMAGES, MIN_OTHER_DESCRIPTION, REASON_CODES } from './types.js';
 import type { Listing } from '../listings/types.js';
 import type { Restriction, UserPublic } from '../identity/types.js';
 import type { Exchange, Message } from '../exchanges/types.js';
 import type { NotifyPort } from '../notifications/types.js';
 import type { Review } from '../reputation/types.js';
 
-export const MAX_REPORT_IMAGES = 3;
-export const MIN_OTHER_DESCRIPTION = 20;
-export const MAX_REPORT_IMAGE_BYTES = 10 * 1024 * 1024;
-
-const REASON_CODES: ReasonCode[] = [
-  'haram-content',
-  'medical-legal',
-  'money-request',
-  'stolen-goods',
-  'spam-commercial',
-  'harassment',
-  'unsafe-behavior',
-  'policy-academic',
-  'other',
-];
+import { MAX_REPORT_IMAGE_BYTES } from './types.js';
 
 const SANCTION_ACTIONS: SanctionAction[] = ['hide', 'unhide', 'warn', 'suspend', 'ban', 'clear-restriction'];
 const MEMBER_SANCTIONS: SanctionAction[] = ['hide', 'warn', 'suspend', 'ban'];
@@ -68,7 +55,7 @@ export interface ModerationDeps {
 
 export function createModerationService(
   deps: ModerationDeps,
-  opts: { now?: () => number; store?: ModerationStore } = {},
+  opts: { now?: () => number; store?: ModerationStorePort } = {},
 ) {
   const store = opts.store ?? new ModerationStore();
   const now = opts.now ?? Date.now;
@@ -157,7 +144,7 @@ export function createModerationService(
       await store.openCase(created.id);
       await store.saveReport(created);
     }
-    deps.notify?.emit(reporterId, 'report-status', created.id);
+    await deps.notify?.emit(reporterId, 'report-status', created.id);
     return ok(created);
   }
 
@@ -199,7 +186,7 @@ export function createModerationService(
     if (next === 'Under review') await store.openCase(id);
     else await store.closeCase(id);
     await store.saveReport(r);
-    deps.notify?.emit(r.reporterId, 'report-status', id);
+    await deps.notify?.emit(r.reporterId, 'report-status', id);
     return ok(r);
   }
 
@@ -242,7 +229,7 @@ export function createModerationService(
       input.targetType === 'user'
         ? input.targetId
         : (await deps.listings.get(input.targetId))?.ownerId;
-    if (notifyTarget) deps.notify?.emit(notifyTarget, 'moderation-action', created.id);
+    if (notifyTarget) await deps.notify?.emit(notifyTarget, 'moderation-action', created.id);
     return ok(created);
   }
 
@@ -265,7 +252,7 @@ export function createModerationService(
       actor,
       atMs: now(),
     });
-    deps.notify?.emit(userId, 'moderation-action', created.id);
+    await deps.notify?.emit(userId, 'moderation-action', created.id);
     return ok(created);
   }
 
@@ -286,7 +273,7 @@ export function createModerationService(
       actor,
       atMs: now(),
     });
-    if (restored.value.ownerId) deps.notify?.emit(restored.value.ownerId, 'moderation-action', created.id);
+    if (restored.value.ownerId) await deps.notify?.emit(restored.value.ownerId, 'moderation-action', created.id);
     return ok(created);
   }
 
@@ -360,7 +347,7 @@ export function createModerationService(
     r.history.push({ status: 'Resolved', atMs, by: moderatorId });
     await store.closeCase(reportId);
     await store.saveReport(r);
-    deps.notify?.emit(r.reporterId, 'report-status', reportId);
+    await deps.notify?.emit(r.reporterId, 'report-status', reportId);
     return ok(handover);
   }
 
@@ -408,3 +395,6 @@ function isSafeImageReference(image: unknown): image is string {
 }
 
 export type ModerationService = ReturnType<typeof createModerationService>;
+
+/** Re-exported from types.js so client bundles can import them without node deps. */
+export { MAX_REPORT_IMAGES, MAX_REPORT_IMAGE_BYTES, MIN_OTHER_DESCRIPTION, REASON_CODES };

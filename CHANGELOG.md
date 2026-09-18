@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased — Phase 5 U3: Reviews/Reports/Moderation/Inbox (BL-11..BL-14)
+
+- Web routes: blind bilateral reviews + one response on Completed exchanges
+  (hidden until both submit or 14 days, lazy reveal sweep on reads), aggregate
+  on profiles; report flow with reason codes + reporter status timeline;
+  moderator-only queue with triage/sanctions/escalate + audit log;
+  notification inbox with read tracking, nav unread badge, moderator nav link.
+- MySQL: `reviews`/`reports`/`sanctions`/`voids`/`handovers`/`open_cases`/
+  `notifications` tables (additive; `db/migrations/003-u3-tables.sql`) +
+  stores with full seam parity; `ReputationStorePort`/`ModerationStorePort`
+  mirror `ExchangesStorePort`; all `notify?.emit` sites awaited.
+- Known limitations: moderator thread evidence (`viewThread`) fails closed
+  (`not-configured`) until the privacy seam gets a MySQL store (U4);
+  handover approval needs `MODERATION_OWNER_ID`; notifications have no deep
+  links yet.
+- 138 tests green (`npm test`, incl. `tests/mysql-u3.test.ts`),
+  `tsc --noEmit` clean, `next build` green.
+
+## Unreleased — Phase 5 U2: Proposals/Exchanges in the browser (BL-07..BL-10)
+
+- Web routes: proposals inbox/sent/received, propose (own-listing picker +
+  terms), proposal detail with counterparty accept (proposal-accept
+  disclaimer)/decline + either-side withdraw, exchange detail with
+  Cairo schedule + safety nudge + private-place ack, two-step completion
+  (Done → Confirm/Dispute ≤7 days), cancellation with reason, and the
+  participant-only text thread. Cap-5 rejection + Locked indicator surface
+  domain reasons; non-participant reads 404.
+- MySQL: `proposals`/`exchanges`/`messages`/`holds` tables (additive;
+  `db/schema.sql` re-applies cleanly on fresh DBs) + `MySqlExchangesStore`
+  with full seam parity; `truncateWorld` covers U2 tables.
+- Seams: new `ExchangesStorePort` (mirrors `IdentityStorePort`; service
+  behavior unchanged) + `SAFETY_NUDGE` moved to node-free `types.ts` so
+  client bundles stay browser-safe.
+- Time duties: proposal expiry + Done auto-complete run as a lazy
+  in-process sweep on proposal/exchange reads (no scheduler yet).
+- Cairo input: `datetime-local` interpreted as Africa/Cairo wall time
+  (DST-aware, verified +2/+3) before domain validation.
+- 123 tests green (`npm test`, incl. new `tests/mysql-exchanges.test.ts`),
+  `tsc --noEmit` clean, `next build` green.
+
 ## 2026-09-17 — Phase 4: Pilot Hardening & Launch (BL-15..BL-18)
 
 - Metrics seam: pilot dashboard input (members, listings, completions,

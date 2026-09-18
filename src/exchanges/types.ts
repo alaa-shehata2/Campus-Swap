@@ -69,3 +69,8 @@ export interface LockStatus {
   /** Derived (not stored): true when the listing holds 5 open proposals. */
   locked: boolean;
 }
+
+export const SAFETY_NUDGE =
+  'Safety: prefer a public on-campus spot (library hall, campus café) and tell a friend ' +
+  'where you are going. Private residences are allowed only by mutual agreement — ' +
+  'you accepted the safety reminder for a private place. See the full Terms.';

@@ -15,6 +15,35 @@ function cloneExchange(e: Exchange): Exchange {
 }
 
 /** In-memory exchanges store. Repository seam: swap for MySQL (ADR-0002) without touching the service. */
+export interface ExchangesExport {
+  proposals: Proposal[];
+  exchanges: Exchange[];
+  messages: Record<string, Message[]>;
+  holds: Array<[string, string]>;
+}
+
+/** Store port — satisfied by the in-memory store and the MySQL store. */
+export interface ExchangesStorePort {
+  insertProposal(p: Omit<Proposal, 'id'>): Promise<Proposal>;
+  getProposal(id: string): Promise<Proposal | undefined>;
+  saveProposal(p: Proposal): Promise<void>;
+  openProposalsForListing(listingId: string): Promise<Proposal[]>;
+  proposedOlderThan(nowMs: number, windowMs: number): Promise<Proposal[]>;
+  doneMarkedOlderThan(nowMs: number, windowMs: number): Promise<Exchange[]>;
+  insertExchange(e: Omit<Exchange, 'id'>): Promise<Exchange>;
+  getExchange(id: string): Promise<Exchange | undefined>;
+  saveExchange(e: Exchange): Promise<void>;
+  hold(listingId: string, exchangeId: string): Promise<void>;
+  heldBy(listingId: string): Promise<string | undefined>;
+  release(listingId: string): Promise<void>;
+  insertMessage(m: Omit<Message, 'id'>): Promise<Message>;
+  messagesFor(exchangeId: string): Promise<Message[]>;
+  exportState(): Promise<ExchangesExport>;
+  importState(state: ExchangesExport): Promise<void>;
+  exchangeStats(): Promise<Record<ExchangeStatus, number>>;
+  proposalStats(): Promise<Record<ProposalStatus, number>>;
+}
+
 export class ExchangesStore {
   private proposals = new Map<string, Proposal>();
   private exchanges = new Map<string, Exchange>();
@@ -109,12 +138,7 @@ export class ExchangesStore {
     return (this.messages.get(exchangeId) ?? []).map((m) => ({ ...m }));
   }
 
-  async exportState(): Promise<{
-    proposals: Proposal[];
-    exchanges: Exchange[];
-    messages: Record<string, Message[]>;
-    holds: Array<[string, string]>;
-  }> {
+  async exportState(): Promise<ExchangesExport> {
     const messages: Record<string, Message[]> = {};
     for (const [id, list] of this.messages) messages[id] = list.map((m) => ({ ...m }));
     return {
@@ -125,12 +149,7 @@ export class ExchangesStore {
     };
   }
 
-  async importState(state: {
-    proposals: Proposal[];
-    exchanges: Exchange[];
-    messages: Record<string, Message[]>;
-    holds: Array<[string, string]>;
-  }): Promise<void> {
+  async importState(state: ExchangesExport): Promise<void> {
     if (!state || !Array.isArray(state.proposals) || !Array.isArray(state.exchanges)) {
       throw new Error('Invalid exchanges snapshot.');
     }

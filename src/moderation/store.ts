@@ -2,6 +2,34 @@ import { randomUUID } from 'node:crypto';
 import type { Handover, Report, ReviewVoid, Sanction } from './types.js';
 
 /** In-memory moderation store. Repository seam: swap for MySQL (ADR-0002) without touching the service. */
+export interface ModerationExport {
+  reports: Report[];
+  sanctions: Sanction[];
+  voids: ReviewVoid[];
+  handovers: Handover[];
+  openCases: string[];
+}
+
+/** Store port — satisfied by the in-memory store and the MySQL store. */
+export interface ModerationStorePort {
+  insertReport(r: Omit<Report, 'id'>): Promise<Report>;
+  getReport(id: string): Promise<Report | undefined>;
+  allReports(): Promise<Report[]>;
+  saveReport(r: Report): Promise<void>;
+  addSanction(s: Omit<Sanction, 'id'>): Promise<Sanction>;
+  addVoid(v: Omit<ReviewVoid, 'id'>): Promise<ReviewVoid>;
+  addHandover(h: Omit<Handover, 'id'>): Promise<Handover>;
+  getSanctions(): Promise<Sanction[]>;
+  getVoids(): Promise<ReviewVoid[]>;
+  getHandovers(): Promise<Handover[]>;
+  openCase(reportId: string): Promise<void>;
+  closeCase(reportId: string): Promise<void>;
+  hasOpenCase(): Promise<boolean>;
+  openReports(): Promise<Report[]>;
+  exportState(): Promise<ModerationExport>;
+  importState(state: ModerationExport): Promise<void>;
+}
+
 export class ModerationStore {
   private reports = new Map<string, Report>();
   private sanctions: Sanction[] = [];
@@ -81,13 +109,7 @@ export class ModerationStore {
     return out;
   }
 
-  async exportState(): Promise<{
-    reports: Report[];
-    sanctions: Sanction[];
-    voids: ReviewVoid[];
-    handovers: Handover[];
-    openCases: string[];
-  }> {
+  async exportState(): Promise<ModerationExport> {
     return {
       reports: [...this.reports.values()].map((r) => structuredClone(r)),
       sanctions: await this.getSanctions(),
@@ -97,13 +119,7 @@ export class ModerationStore {
     };
   }
 
-  async importState(state: {
-    reports: Report[];
-    sanctions: Sanction[];
-    voids: ReviewVoid[];
-    handovers: Handover[];
-    openCases: string[];
-  }): Promise<void> {
+  async importState(state: ModerationExport): Promise<void> {
     if (!state || !Array.isArray(state.reports)) throw new Error('Invalid moderation snapshot.');
     this.reports.clear();
     this.sanctions = [];

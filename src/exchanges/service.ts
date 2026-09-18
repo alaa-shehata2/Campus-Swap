@@ -1,7 +1,7 @@
 import { fail, ok, type Result } from '../common/errors.js';
 import { formatCairoTime } from '../common/cairoTime.js';
 import type { NotifyPort } from '../notifications/types.js';
-import { ExchangesStore } from './store.js';
+import { ExchangesStore, type ExchangesStorePort } from './store.js';
 import type {
   CancelReason,
   Exchange,
@@ -12,6 +12,7 @@ import type {
   Proposal,
   ProposeInput,
 } from './types.js';
+import { SAFETY_NUDGE } from './types.js';
 
 export const MAX_OPEN_PROPOSALS = 5;
 export const PROPOSAL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -27,7 +28,7 @@ export interface ExchangesDeps {
 
 export function createExchangesService(
   deps: ExchangesDeps,
-  opts: { now?: () => number; store?: ExchangesStore } = {},
+  opts: { now?: () => number; store?: ExchangesStorePort } = {},
 ) {
   const store = opts.store ?? new ExchangesStore();
   const now = opts.now ?? Date.now;
@@ -135,7 +136,7 @@ export function createExchangesService(
       status: 'Proposed',
       createdAtMs: now(),
     });
-    deps.notify?.emit(counterpartyId, 'proposal-received', proposal.id);
+    await deps.notify?.emit(counterpartyId, 'proposal-received', proposal.id);
     return ok(proposal);
   }
 
@@ -172,7 +173,7 @@ export function createExchangesService(
       p.status = 'Declined';
       p.decidedAtMs = now();
       await store.saveProposal(p);
-      deps.notify?.emit(p.proposerId, 'proposal-declined', p.id);
+      await deps.notify?.emit(p.proposerId, 'proposal-declined', p.id);
       return ok(p);
     }
     return accept(p);
@@ -221,7 +222,7 @@ export function createExchangesService(
     p.decidedAtMs = now();
     p.exchangeId = exchange.id;
     await store.saveProposal(p);
-    deps.notify?.emit(p.proposerId, 'proposal-accepted', p.id);
+    await deps.notify?.emit(p.proposerId, 'proposal-accepted', p.id);
     return ok({ proposal: p, exchange });
   }
 
@@ -268,7 +269,7 @@ export function createExchangesService(
       p.status = 'Expired';
       p.decidedAtMs = nowMs;
       await store.saveProposal(p);
-      deps.notify?.emit(p.proposerId, 'proposal-expired', p.id);
+      await deps.notify?.emit(p.proposerId, 'proposal-expired', p.id);
     }
     return expired;
   }
@@ -329,7 +330,7 @@ export function createExchangesService(
     e.schedule = { at: formatCairoTime(new Date(atMs).toISOString()), place };
     e.log.push(`scheduled for ${e.schedule.at} at ${place}`);
     await store.saveExchange(e);
-    deps.notify?.emit(otherOf(e, userId), rescheduled ? 'schedule-changed' : 'schedule-set', e.id);
+    await deps.notify?.emit(otherOf(e, userId), rescheduled ? 'schedule-changed' : 'schedule-set', e.id);
     return ok({ exchange: e, safetyNudge: SAFETY_NUDGE });
   }
 
@@ -373,7 +374,7 @@ export function createExchangesService(
         : `done marked by ${userId}`,
     );
     await store.saveExchange(e);
-    deps.notify?.emit(otherOf(e, userId), 'completion-requested', e.id);
+    await deps.notify?.emit(otherOf(e, userId), 'completion-requested', e.id);
     return ok(e);
   }
 
@@ -404,7 +405,7 @@ export function createExchangesService(
     e.status = 'Completed';
     e.log.push(`confirmed by ${userId}`);
     await store.saveExchange(e);
-    deps.notify?.emit(otherOf(e, userId), 'completion-confirmed', e.id);
+    await deps.notify?.emit(otherOf(e, userId), 'completion-confirmed', e.id);
     return ok(e);
   }
 
@@ -445,8 +446,8 @@ export function createExchangesService(
       e.status = 'Completed';
       e.log.push('auto-completed after 7-day silence');
       await store.saveExchange(e);
-      deps.notify?.emit(e.participantA, 'completion-confirmed', e.id);
-      deps.notify?.emit(e.participantB, 'completion-confirmed', e.id);
+      await deps.notify?.emit(e.participantA, 'completion-confirmed', e.id);
+      await deps.notify?.emit(e.participantB, 'completion-confirmed', e.id);
     }
     return due;
   }
@@ -483,7 +484,7 @@ export function createExchangesService(
     if (input.detail?.trim()) e.cancelDetail = input.detail.trim();
     e.log.push(`cancelled by ${userId}: ${input.reason}`);
     await store.saveExchange(e);
-    deps.notify?.emit(otherOf(e, userId), 'cancellation', e.id);
+    await deps.notify?.emit(otherOf(e, userId), 'cancellation', e.id);
     return ok(e);
   }
 
@@ -566,9 +567,7 @@ export interface ScheduleInput {
 
 const PRIVATE_PLACE_RE = /\b(apartment|flat|house|home|room|dorm|hostel|residence|my place)\b/i;
 
-export const SAFETY_NUDGE =
-  'Safety: prefer a public on-campus spot (library hall, campus café) and tell a friend ' +
-  'where you are going. Private residences are allowed only by mutual agreement — ' +
-  'you accepted the safety reminder for a private place. See the full Terms.';
-
 export type ExchangesService = ReturnType<typeof createExchangesService>;
+
+/** Re-exported from types.js so client bundles can import it without node deps. */
+export { SAFETY_NUDGE };

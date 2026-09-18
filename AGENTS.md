@@ -40,6 +40,10 @@ Before changing code:
 5. Identify relevant tests.
 6. Explain the proposed approach.
 
+For web UI changes, also read `docs/web-ui-standards.md`. Web routes must use
+the shared full-screen marketplace shell, fluid grid, responsive filter
+patterns, and accessibility/state checklist defined there.
+
 During implementation:
 
 - Do not rewrite unrelated code.

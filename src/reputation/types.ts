@@ -33,3 +33,7 @@ export interface Aggregate {
 export interface ExchangesPort {
   readExchange(id: string): Promise<Exchange | undefined>;
 }
+
+export const MAX_REVIEW_TEXT = 1000;
+export const REVEAL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+export const REVIEW_EDIT_MS = 48 * 60 * 60 * 1000;

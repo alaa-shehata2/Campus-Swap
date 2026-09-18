@@ -51,21 +51,38 @@ npm test        # domain seam + journey tests (node:test via tsx)
 npm run typecheck
 ```
 
-## Run the web app locally (U1: browse/auth/publish)
+## Run the web app locally (U2: browse/auth/publish + proposals/exchanges)
 
 Requires Docker (self-hosted MySQL for the pilot).
 
 ```bash
 docker compose up -d mysql
-npm run seed --prefix web   # demo members (maya@kfs.edu.eg, jonas@gmail.com / password1) + listings
+# Fresh database: apply the schema once —
+docker exec -i campuswap-mysql mysql -ucampuswap -pcampuswap campuswap < db/schema.sql
+# Existing U1 database: apply only the additive U2 tables (proposals, exchanges, messages, holds) —
+docker exec -i campuswap-mysql mysql -ucampuswap -pcampuswap campuswap < db/migrations/002-u2-tables.sql
+# Existing U2 database: apply only the additive U3 tables (reviews, reports, sanctions, voids, handovers, open_cases, notifications) —
+docker exec -i campuswap-mysql mysql -ucampuswap -pcampuswap campuswap < db/migrations/003-u3-tables.sql
+npm run seed --prefix web   # demo members (maya@kfs.edu.eg, jonas@gmail.com / password1) + listings + a completed demo exchange with bilateral reviews + an open demo report; jonas becomes moderator (bootstrap, first run only)
 npm run dev --prefix web    # http://localhost:3000
 ```
 
 `web/.env.local` holds `MYSQL_URL` (gitignored; see `web/.env.example`).
+Optional `MODERATION_OWNER_ID` (user id of the platform owner) enables
+law-enforcement handover approval; unset → handover stays unavailable by
+design (escalate reports `not-configured`). Test/moderator accounts are
+dev-only fixtures, never production roles.
 U1 verified end-to-end in headless Chromium: logged-out browse + search +
 login-gated actions (SC-2), signup → first published listing (SC-1),
 duplicate-email field error, profile without email leak. Disclaimer + Terms
 link on signup and listing create; all datetimes labeled Cairo time.
+U2 verified via live-server walkthrough: propose → accept (auto-pause) →
+Cairo schedule + safety nudge → Done → Confirm → Completed, cancellation with
+reason, participant thread, cap-5 rejection, Locked indicator, 404 on
+non-participant reads; full loop also covered by `tests/mysql-exchanges.test.ts`.
+Proposal expiry + Done auto-complete run as a lazy in-process sweep on
+proposal/exchange reads (no scheduler yet — U4/post-MVP); the notification
+inbox lands in U3, so domain events are not persisted.
 
 ## Layout
 

@@ -7,3 +7,4 @@ coverage/
 .env.local
 web/.env*.local
 web/.next/
+.worktrees/

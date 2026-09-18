@@ -1,14 +1,67 @@
 @import "tailwindcss";
 
+/**
+ * CampusSwap marketplace tokens (web-ui-standards §3). Semantic names only —
+ * routes must use these utilities, never one-off stone/emerald/amber values.
+ * Palette carries the established look; a rebrand touches this file alone.
+ */
+@theme {
+  --color-surface-page: #fafaf9;
+  --color-surface-elevated: #ffffff;
+  --color-surface-sunken: #f5f5f4;
+
+  --color-text-primary: #1c1917;
+  --color-text-muted: #78716c;
+  --color-text-inverse: #ffffff;
+
+  --color-border: #e7e5e4;
+  --color-focus: #1d4ed8;
+
+  --color-brand: #047857;
+  --color-brand-ink: #065f46;
+  --color-brand-contrast: #ffffff;
+
+  --color-offer-bg: #ecfdf5;
+  --color-offer-ink: #065f46;
+  --color-request-bg: #fffbeb;
+  --color-request-ink: #92400e;
+
+  --color-status-active-bg: #ecfdf5;
+  --color-status-active-ink: #065f46;
+  --color-status-paused-bg: #f5f5f4;
+  --color-status-paused-ink: #57534e;
+  --color-status-warning-bg: #fffbeb;
+  --color-status-warning-ink: #92400e;
+  --color-status-danger-bg: #fef2f2;
+  --color-status-danger-ink: #991b1b;
+  --color-status-info-bg: #eff6ff;
+  --color-status-info-ink: #1e40af;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.1);
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
-  @apply bg-stone-50 text-stone-900 antialiased;
+  @apply bg-surface-page text-text-primary antialiased;
 }
 
 :focus-visible {
-  outline: 3px solid #1d4ed8;
+  outline: 3px solid var(--color-focus);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

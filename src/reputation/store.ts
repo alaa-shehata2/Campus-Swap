@@ -10,6 +10,18 @@ function clone(r: Review): Review {
 }
 
 /** In-memory reputation store. Repository seam: swap for MySQL (ADR-0002) without touching the service. */
+export interface ReputationStorePort {
+  insert(r: Omit<Review, 'id'>): Promise<Review>;
+  get(id: string): Promise<Review | undefined>;
+  save(r: Review): Promise<void>;
+  forExchange(exchangeId: string): Promise<Review[]>;
+  publishedFor(revieweeId: string): Promise<Review[]>;
+  counts(): Promise<{ total: number; published: number }>;
+  exchangeIds(): Promise<string[]>;
+  exportState(): Promise<Review[]>;
+  importState(reviews: Review[]): Promise<void>;
+}
+
 export class ReputationStore {
   private items = new Map<string, Review>();
 
@@ -61,11 +73,11 @@ export class ReputationStore {
     return [...ids];
   }
 
-  exportState(): Review[] {
+  async exportState(): Promise<Review[]> {
     return [...this.items.values()].map(clone);
   }
 
-  importState(reviews: Review[]): void {
+  async importState(reviews: Review[]): Promise<void> {
     if (!Array.isArray(reviews)) throw new Error('Invalid reputation snapshot.');
     this.items.clear();
     for (const r of reviews) this.items.set(r.id, clone(r));
