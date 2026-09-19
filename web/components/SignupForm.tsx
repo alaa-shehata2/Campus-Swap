@@ -24,7 +24,8 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
             name="displayName"
             required
             autoComplete="nickname"
-            className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
+            placeholder="e.g. Maya"
+            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 shadow-sm placeholder:text-stone-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
           />
           <FieldErrors errors={state.errors} field="displayName" />
         </div>
@@ -38,7 +39,8 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
             type="email"
             required
             autoComplete="email"
-            className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
+            placeholder="you@example.com"
+            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 shadow-sm placeholder:text-stone-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
           />
           <FieldErrors errors={state.errors} field="email" />
         </div>
@@ -53,7 +55,8 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
             required
             minLength={8}
             autoComplete="new-password"
-            className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
+            placeholder="8+ characters"
+            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 shadow-sm placeholder:text-stone-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
           />
           <FieldErrors errors={state.errors} field="password" />
         </div>
@@ -67,7 +70,7 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
             defaultValue="KFS University"
             required
             autoComplete="off"
-            className="mt-1 w-full rounded border border-stone-300 px-3 py-2"
+            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 shadow-sm placeholder:text-stone-400 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
           />
           <p className="mt-1 text-sm text-stone-600">
             Self-declared, not verified. Misrepresentation violates the rules.
@@ -76,12 +79,12 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
         </div>
         <div className="space-y-2">
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" name="ageConfirmed18" required className="mt-1" />I confirm I am 18
+            <input type="checkbox" name="ageConfirmed18" required className="mt-1 accent-emerald-700" />I confirm I am 18
             or older (18+ only).
           </label>
           <FieldErrors errors={state.errors} field="ageConfirmed18" />
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" name="rulesAccepted" required className="mt-1" />I accept the
+            <input type="checkbox" name="rulesAccepted" required className="mt-1 accent-emerald-700" />I accept the
             community rules and Terms.
           </label>
           <FieldErrors errors={state.errors} field="rulesAccepted" />
